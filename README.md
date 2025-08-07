@@ -18,7 +18,7 @@ this Server is powerful WebGL mmo template created special for multiplayer onlin
 
 ```
 # clone the project
-git clone https://sebastiao_dev@bitbucket.org/sebastiao_dev/basicsampleserver.git
+git clone https://github.com/rio3dstudios/metaverse.git
 
 
 # open the project directory in windows cmd
