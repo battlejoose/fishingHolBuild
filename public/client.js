@@ -1,7 +1,6 @@
 var socket = io() || {};
 socket.isReady = false;
 
-
 window.addEventListener('load', function() {
 
 	var execInUnity = function(method) {
@@ -33,9 +32,9 @@ window.addEventListener('load', function() {
 	});//END_SOCKET.ON
 
 					      
-	socket.on('LOGIN_SUCCESS', function(id,name,posX,posY,posZ) {
+	socket.on('LOGIN_SUCCESS', function(id,name,position) {
 				      		
-	  var currentUserAtr = id+':'+name+':'+posX+':'+posY+':'+posZ;
+	  var currentUserAtr = id+':'+name+':'+position;
 	  
 	   if(window.unityInstance!=null)
 		{
@@ -47,9 +46,9 @@ window.addEventListener('load', function() {
 	});//END_SOCKET.ON
 	
 		
-	socket.on('SPAWN_PLAYER', function(id,name,posX,posY,posZ) {
+	socket.on('SPAWN_PLAYER', function(id,name,position) {
 	
-	    var currentUserAtr = id+':'+name+':'+posX+':'+posY+':'+posZ;
+	    var currentUserAtr = id+':'+name+':'+position;
 		
 		if(window.unityInstance!=null)
 		{
@@ -60,35 +59,18 @@ window.addEventListener('load', function() {
 		
 	});//END_SOCKET.ON
 	
+
 	
-	
-    socket.on('UPDATE_MOVE_AND_ROTATE', function(id,posX,posY,posZ,rotation) {
-		
-	    var currentUserAtr = id+':'+posX+':'+posY+':'+posZ+':'+rotation;
+    socket.on('UPDATE_MOVE_AND_ROTATE', function(id,position,rotation) {
+	     var currentUserAtr = id+':'+position+':'+rotation;
 		 	
-		if(window.unityInstance!=null)
+		 if(window.unityInstance!=null)
 		{
 		   window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateMoveAndRotate',currentUserAtr);
 		}
 		
 	});//END_SOCKET.ON
 	
-	
-	socket.on('UPDATE_PLAYER_ANIMATOR', function(id,key,value,type) {
-	
-	     var currentUserAtr = id+':'+key+':'+value+':'+type;
-		
-		
-		if(window.unityInstance!=null)
-		{
-	     // sends the package currentUserAtr to the method OnUpdateAnim in the NetworkManager class on Unity
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateAnim', currentUserAtr);
-		
-		}
-		
-	});//END_SOCKET.ON
-	
-
 		        
 	socket.on('USER_DISCONNECTED', function(id) {
 	
@@ -108,60 +90,4 @@ window.addEventListener('load', function() {
 
 });//END_window_addEventListener
 
-
-
-window.onload = (e) => {
-	mainFunction(1000);
-  };
-  
-  
-  function mainFunction(time) {
-  
-  
-	navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-	  var madiaRecorder = new MediaRecorder(stream);
-	  madiaRecorder.start();
-  
-	  var audioChunks = [];
-  
-	  madiaRecorder.addEventListener("dataavailable", function (event) {
-		audioChunks.push(event.data);
-	  });
-  
-	  madiaRecorder.addEventListener("stop", function () {
-		var audioBlob = new Blob(audioChunks);
-  
-		audioChunks = [];
-  
-		var fileReader = new FileReader();
-		fileReader.readAsDataURL(audioBlob);
-		fileReader.onloadend = function () {
-   
-  
-		  var base64String = fileReader.result;
-		  socket.emit("VOICE", base64String);
-  
-		};
-  
-		madiaRecorder.start();
-  
-  
-		setTimeout(function () {
-		  madiaRecorder.stop();
-		}, time);
-	  });
-  
-	  setTimeout(function () {
-		madiaRecorder.stop();
-	  }, time);
-	});
-  
-  
-   socket.on("UPDATE_VOICE", function (data) {
-	  var audio = new Audio(data);
-	  audio.play();
-	});
-	
-	
-  }
 
