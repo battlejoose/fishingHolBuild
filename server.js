@@ -25,8 +25,6 @@ io.on('connection', function(socket){
   
   //to store current client connection
   var currentUser;
-  
-  var sended = false;
 	
 	
 	//create a callback fuction to listening EmitPing() method in NetworkMannager.cs unity script
@@ -53,52 +51,51 @@ io.on('connection', function(socket){
          // fills out with the information emitted by the player in the unity
         currentUser = {
 			       name:data.name,
-				  
-                   position:data.position,
+                   posX:data.posX,
+				   posY:data.posY,
+				   posZ:data.posZ,
 				   rotation:'0',
 			       id:socket.id,//alternatively we could use socket.id
-				   socketID:socket.id//fills out with the id of the socket that was open
-				
+				   socketID:socket.id,//fills out with the id of the socket that was open
+				   animation:""
 				   };//new user  in clients list
 					
 		console.log('[INFO] player '+currentUser.name+': logged!');
-		console.log('[INFO] currentUser.position '+currentUser.position);	
+		
 
 		 //add currentUser in clients list
 		 clients.push(currentUser);
 		 
 		 //add client in search engine
 		 clientLookup[currentUser.id] = currentUser;
-		 
-		 sockets[currentUser.id] = socket;//add curent user socket
+
+		 sockets[currentUser.socketID] = socket;//add curent user socket
 		 
 		 console.log('[INFO] Total players: ' + clients.length);
 		 
 		 /*********************************************************************************************/		
 		
 		//send to the client.js script
-		socket.emit("LOGIN_SUCCESS",currentUser.id,currentUser.name,currentUser.position);
+		socket.emit("LOGIN_SUCCESS",currentUser.id,currentUser.name,currentUser.posX,currentUser.posY,currentUser.posZ);
 		
          //spawn all connected clients for currentUser client 
          clients.forEach( function(i) {
 		    if(i.id!=currentUser.id)
 			{ 
 		      //send to the client.js script
-		      socket.emit('SPAWN_PLAYER',i.id,i.name,i.position);
+		      socket.emit('SPAWN_PLAYER',i.id,i.name,i.posX,i.posY,i.posZ);
 			  
 		    }//END_IF
 	   
 	     });//end_forEach
 		
 		 // spawn currentUser client on clients in broadcast
-		socket.broadcast.emit('SPAWN_PLAYER',currentUser.id,currentUser.name,currentUser.position);
+		socket.broadcast.emit('SPAWN_PLAYER',currentUser.id,currentUser.name,currentUser.posX,currentUser.posY,currentUser.posZ);
 		
   
 	});//END_SOCKET_ON
 	
 	
-	
-
 	
 		
 	//create a callback fuction to listening EmitMoveAndRotate() method in NetworkMannager.cs unity script
@@ -108,20 +105,41 @@ io.on('connection', function(socket){
 	  
 	  if(currentUser)
 	  {
-	
-       currentUser.position = data.position;
+		
+		  
+	   currentUser.posX= data.posX;
+	   currentUser.posY = data.posY;
+	   currentUser.posZ = data.posZ;
 	   
 	   currentUser.rotation = data.rotation;
 	  
 	   // send current user position and  rotation in broadcast to all clients in game
-       socket.broadcast.emit('UPDATE_MOVE_AND_ROTATE', currentUser.id,currentUser.position,currentUser.rotation);
-	
+       socket.broadcast.emit('UPDATE_MOVE_AND_ROTATE', currentUser.id,currentUser.posX,currentUser.posY,currentUser.posZ,currentUser.rotation);
       
        }
 	});//END_SOCKET_ON
 	
-
-
+	
+//create a callback fuction to listening EmitAnimation() method in NetworkMannager.cs unity script
+	socket.on('ANIMATION', function (_data)
+	{
+	  var data = JSON.parse(_data);	
+	  
+	  if(currentUser)
+	  {
+	   
+	   currentUser.timeOut = 0;
+	   
+	    //send to the client.js script
+	   //updates the animation of the player for the other game clients
+       socket.broadcast.emit('UPDATE_PLAYER_ANIMATOR', currentUser.id,data.key,data.value,data.type);
+	
+	   
+      }//END_IF
+	  
+	});//END_SOCKET_ON
+	
+	
 
     // called when the user desconnect
 	socket.on('disconnect', function ()

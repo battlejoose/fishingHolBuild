@@ -4,14 +4,17 @@ var web3 = new Web3();
     try { 
        window.ethereum.enable().then(function() {
            // User has allowed account access to DApp...
-		   var currentUserAtr = "123"+':'+"paca";
+		    console.log("log in!!!");
+			var currentUserAtr = "123"+':'+"paca"+':'+""+':'+position;
 	  
-	   if(window.unityInstance!=null)
-		{
+	        if(window.unityInstance!=null)
+		    {
 		 
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnJoinGame', currentUserAtr);
+		      window.unityInstance.SendMessage ('NetworkManager', 'OnJoinGame', currentUserAtr);
 		
-		}
+		    }
+	  
+			  
        });
     } catch(e) {
        // User has denied account access to DApp...

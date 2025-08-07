@@ -4,7 +4,7 @@
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 
-  <title>fishingholesol</title>
+  <title>Rioverse Project</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
 
@@ -20,7 +20,7 @@
         </div>
       </div>
       <div id="unity-warning"> </div>
- 
+     
     </div>
 		<script src="/socket.io/socket.io.js"></script>
 	<script src="client.js"></script>
@@ -65,8 +65,8 @@
            codeUrl: buildUrl + "/public.wasm",
            streamingAssetsUrl: "StreamingAssets",
            companyName: "DefaultCompany",
-           productName: "fishingholesol",
-           productVersion: "0.1",
+           productName: "Rioverse Project",
+           productVersion: "0.1.0",
 	       showBanner: unityShowBanner,
 	  
 	   
@@ -84,9 +84,9 @@
         // Avoid draining fillrate performance on mobile devices,
         // and default/override low DPI mode on mobile browsers.
         config.devicePixelRatio = 1;
-	  
+        unityShowBanner('WebGL builds are not supported on mobile devices.');
       } else {
-        canvas.style.width = "100vw";
+         canvas.style.width = "100vw";
         canvas.style.height = "100vh";
       }
       loadingBar.style.display = "block";
