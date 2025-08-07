@@ -9,10 +9,10 @@ window.addEventListener('load', function() {
 		
 		var args = Array.prototype.slice.call(arguments, 1);
 		
-		f(window.unityInstance!=null)
+		if(window.unityInstance!=null)
 		{
-		  //fit formats the message to send to the Unity client game, take a look in NetworkManager.cs in Unity
-		  window.unityInstance.SendMessage("NetworkManager", method, args.join(':'));
+		  //fit formats the message to send to the Unity client game, take a look in FishingManager.cs in Unity
+		  window.unityInstance.SendMessage("FishingManager", method, args.join(':'));
 		
 		}
 		
@@ -26,7 +26,7 @@ window.addEventListener('load', function() {
 	 if(window.unityInstance!=null)
 		{
 		 
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnPrintPongMsg', currentUserAtr);
+		  window.unityInstance.SendMessage ('FishingManager', 'OnPrintPongMsg', currentUserAtr);
 		
 		}
 	  
@@ -40,7 +40,7 @@ window.addEventListener('load', function() {
 	   if(window.unityInstance!=null)
 		{
 		 
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnJoinGame', currentUserAtr);
+		  window.unityInstance.SendMessage ('FishingManager', 'OnJoinGame', currentUserAtr);
 		
 		}
 	  
@@ -53,8 +53,8 @@ window.addEventListener('load', function() {
 		
 		if(window.unityInstance!=null)
 		{
-	     // sends the package currentUserAtr to the method OnSpawnPlayer in the NetworkManager class on Unity
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnSpawnPlayer', currentUserAtr);
+	     // sends the package currentUserAtr to the method OnSpawnPlayer in the FishingManager class on Unity
+		  window.unityInstance.SendMessage ('FishingManager', 'OnSpawnPlayer', currentUserAtr);
 		
 		}
 		
@@ -68,7 +68,7 @@ window.addEventListener('load', function() {
 		 	
 		if(window.unityInstance!=null)
 		{
-		   window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateMoveAndRotate',currentUserAtr);
+		   window.unityInstance.SendMessage ('FishingManager', 'OnUpdateMoveAndRotate',currentUserAtr);
 		}
 		
 	});//END_SOCKET.ON
@@ -81,8 +81,8 @@ window.addEventListener('load', function() {
 		
 		if(window.unityInstance!=null)
 		{
-	     // sends the package currentUserAtr to the method OnUpdateAnim in the NetworkManager class on Unity
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateAnim', currentUserAtr);
+	     // sends the package currentUserAtr to the method OnUpdateAnim in the FishingManager class on Unity
+		  window.unityInstance.SendMessage ('FishingManager', 'OnUpdateAnim', currentUserAtr);
 		
 		}
 		
@@ -97,7 +97,7 @@ window.addEventListener('load', function() {
 		if(window.unityInstance!=null)
 		{
 		  
-		 window.unityInstance.SendMessage ('NetworkManager', 'OnUserDisconnected', currentUserAtr);
+		 window.unityInstance.SendMessage ('FishingManager', 'OnUserDisconnected', currentUserAtr);
 		
 		
 		}
