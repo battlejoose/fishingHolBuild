@@ -7,11 +7,9 @@
     "node": "14.x"
   },
   "dependencies": {
-    "cors": "^2.8.5",
-    "express": "^4.19.2",
-    "socket.io": "^4.6.1",
-    "socketio": "^1.0.0",
-    "uuid": "^9.0.1"
+    "express": "^4.10.4",
+    "socket.io": ">=2.4.0",
+    "socketio": "^1.0.0"
   },
   "devDependencies": {},
   "scripts": {

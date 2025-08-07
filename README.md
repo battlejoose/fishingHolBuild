@@ -18,7 +18,7 @@ this Server is powerful WebGL mmo template created special for multiplayer onlin
 
 ```
 # clone the project
-git clone https://github.com/rio3dstudios/metaverse.git
+git clone https://github.com/rio3dstudios/WebGLTutorialServer.git
 
 
 # open the project directory in windows cmd
