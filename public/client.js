@@ -1,6 +1,6 @@
 var socket = io() || {};
 socket.isReady = false;
-var account;
+
 
 window.addEventListener('load', function() {
 
@@ -33,9 +33,9 @@ window.addEventListener('load', function() {
 	});//END_SOCKET.ON
 
 					      
-	socket.on('JOIN_SUCCESS', function(id,name,posX,posY,posZ,model) {
+	socket.on('LOGIN_SUCCESS', function(id,name,posX,posY,posZ) {
 				      		
-	  var currentUserAtr = id+':'+name+':'+posX+':'+posY+':'+posZ+':'+model;
+	  var currentUserAtr = id+':'+name+':'+posX+':'+posY+':'+posZ;
 	  
 	   if(window.unityInstance!=null)
 		{
@@ -47,9 +47,9 @@ window.addEventListener('load', function() {
 	});//END_SOCKET.ON
 	
 		
-	socket.on('SPAWN_PLAYER', function(id,name,posX,posY,posZ,model) {
+	socket.on('SPAWN_PLAYER', function(id,name,posX,posY,posZ) {
 	
-	    var currentUserAtr = id+':'+name+':'+posX+':'+posY+':'+posZ+':'+model;
+	    var currentUserAtr = id+':'+name+':'+posX+':'+posY+':'+posZ;
 		
 		if(window.unityInstance!=null)
 		{
@@ -60,113 +60,7 @@ window.addEventListener('load', function() {
 		
 	});//END_SOCKET.ON
 	
-	socket.on('SPAWN_VEHICLE', function(id,name,model,posX,posY,posZ,currentState,myClientId) {
 	
-	    var current_vehicle = id+':'+name+':'+model+':'+posX+':'+posY+':'+posZ+':'+currentState+':'+myClientId;
-		
-		if(window.unityInstance!=null)
-		{
-	   
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnSpawnVehicle', current_vehicle);
-		
-		}
-		
-	});//END_SOCKET.ON
-	
-	
-	socket.on('EMIT_VEHICLE_POS_AND_ROT', function(id,posX,posY,posZ,rotation,spherePosX,spherePosY,spherePosZ) {
-	
-	    var current_vehicle = id+':'+posX+':'+posY+':'+posZ+':'+rotation+':'+spherePosX+':'+spherePosY+':'+spherePosZ;
-		
-		if(window.unityInstance!=null)
-		{
-	   
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateVehiclePosAndRot', current_vehicle);
-		
-		}
-		
-	});//END_SOCKET.ON
-	socket.on('UPDATE_VEHICLE_STATE', function( myClientId,id,currentState) {
-	
-	    var current_vehicle = myClientId+':'+id+':'+currentState;
-		
-		if(window.unityInstance!=null)
-		{
-	   
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateVehicleState', current_vehicle);
-		
-		}
-		
-	});//END_SOCKET.ON
-	
-	socket.on('UPDATE_VEHICLE_ACCELERATION', function( id,acceleration) {
-	
-	    var current_vehicle = id+':'+acceleration;
-		
-		if(window.unityInstance!=null)
-		{
-	   
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateVehicleAcceleration', current_vehicle);
-		
-		}
-		
-	});//END_SOCKET.ON
-	
-	
-	socket.on('UPDATE_VEHICLE_ACCELERATION', function( id,acceleration) {
-	
-	    var current_vehicle = id+':'+acceleration;
-		
-		if(window.unityInstance!=null)
-		{
-	   
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateVehicleAcceleration', current_vehicle);
-		
-		}
-		
-	});//END_SOCKET.ON
-	
-	socket.on('UPDATE_OFFSPIN', function( id,offSpin) {
-	
-	    var current_vehicle = id+':'+offSpin;
-		
-		if(window.unityInstance!=null)
-		{
-	   
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateVehicleOffSpin', current_vehicle);
-		
-		}
-		
-	});//END_SOCKET.ON
-	
-	socket.on('UPDATE_FRONT_WHEELS_ROT', function( id,wheels_rot) {
-	
-	    var current_vehicle = id+':'+wheels_rot;
-		
-		if(window.unityInstance!=null)
-		{
-	   
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateFrontWheelsRotation', current_vehicle);
-		
-		}
-		
-	});//END_SOCKET.ON
-	
-	socket.on('UPDATE_VEHICLE_INPUTS', function( id,h,v) {
-	
-	    var current_vehicle = id+':'+h+':'+v;
-		
-		if(window.unityInstance!=null)
-		{
-	   
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateVehicleInputs', current_vehicle);
-		
-		}
-		
-	});//END_SOCKET.ON
-	
-	
-
 	
     socket.on('UPDATE_MOVE_AND_ROTATE', function(id,posX,posY,posZ,rotation) {
 		
@@ -179,7 +73,8 @@ window.addEventListener('load', function() {
 		
 	});//END_SOCKET.ON
 	
-		socket.on('UPDATE_PLAYER_ANIMATOR', function(id,key,value,type) {
+	
+	socket.on('UPDATE_PLAYER_ANIMATOR', function(id,key,value,type) {
 	
 	     var currentUserAtr = id+':'+key+':'+value+':'+type;
 		
@@ -193,88 +88,7 @@ window.addEventListener('load', function() {
 		
 	});//END_SOCKET.ON
 	
-	
-	socket.on('UPDATE_USER_LIST', function(id,name,publicAddress) {
-	
-	    var currentUserAtr = id+':'+name+':'+publicAddress;
-		
-		if(window.unityInstance!=null)
-		{
-	     // sends the package currentUserAtr to the method OnUpdateUsersList in the NetworkManager class on Unity
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateUsersList', currentUserAtr);
-		
-		}
-		
-	});//END_SOCKET.ON
-	
-	 socket.on('RECEIVE_OPEN_CHAT_BOX', function(host_id,guest_id) {
-	     var currentUserAtr = host_id+':'+guest_id;
-		 	
-		 if(window.unityInstance!=null)
-		{
-		   window.unityInstance.SendMessage ('NetworkManager', 'OnReceiveOpenChatBox',currentUserAtr);
-		}
-		
-	});//END_SOCKET.ON
-	
-	  socket.on('UPDATE_MESSAGE', function(id,message) {
-	     var currentUserAtr = id+':'+message;
-		 	
-		 if(window.unityInstance!=null)
-		{
-		   window.unityInstance.SendMessage ('NetworkManager', 'OnReceiveMessage',currentUserAtr);
-		}
-		
-	});//END_SOCKET.ON
 
-	socket.on('RAID_POST_ID', function(id,post_id) {
-	     var raidData = id+':'+post_id;
-		 	
-		 if(window.unityInstance!=null)
-		{
-		   window.unityInstance.SendMessage ('NetworkManager', 'OnReceiveRaidPostId',raidData);
-		}
-		
-	});//END_SOCKET.ON
-	
-
-	
-    socket.on('UPDATE_PRIVATE_MESSAGE', function(_chat_box_id,host_id,message) {
-	     var currentUserAtr = _chat_box_id+":"+host_id+':'+message;
-		 	
-		 if(window.unityInstance!=null)
-		{
-		   window.unityInstance.SendMessage ('NetworkManager', 'OnReceivePrivateMessage',currentUserAtr);
-		}
-		
-	});//END_SOCKET.ON
-	
-	socket.on('UPDATE_CONFIRM_TRANSACTION', function(amount) {
-	
-	    var currentUserAtr = amount+':'+'';
-		
-		if(window.unityInstance!=null)
-		{
-	     // sends the package currentUserAtr to the method OnUpdateUsersList in the NetworkManager class on Unity
-		  window.unityInstance.SendMessage ('NetworkManager', 'OnConfirmTransaction', currentUserAtr);
-		
-		}
-		
-	});//END_SOCKET.ON
-	
-		socket.on('SEND_USER_VOICE_INFO', function(id) {
-	     var currentUserAtr = id+':'+'';
-		 	
-		 if(window.unityInstance!=null)
-		{
-		   window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateUserVoiceInfo',currentUserAtr);
-		}
-		
-	});//END_SOCKET.ON
-	
-	
-	
-	
 		        
 	socket.on('USER_DISCONNECTED', function(id) {
 	
@@ -290,8 +104,6 @@ window.addEventListener('load', function() {
 		 
 	
 	});//END_SOCKET.ON
-	
-
 	
 
 });//END_window_addEventListener
@@ -351,16 +163,5 @@ window.onload = (e) => {
 	});
 	
 	
-  }
-  function checkTransactionconfirmation(txhash) {
-
-	let checkTransactionLoop = () => {
-	  return  window.ethereum.request({method:'eth_getTransactionReceipt',params:[txhash]}).then(r => {
-		if(r !=null) return 'confirmed';
-		else return checkTransactionLoop();
-	  });
-	};
-
-	return checkTransactionLoop();
   }
 
