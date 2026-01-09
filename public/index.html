@@ -3,6 +3,7 @@
 
 <head>
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
   <title>fishingholesol</title>
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
@@ -84,7 +85,8 @@
         // Avoid draining fillrate performance on mobile devices,
         // and default/override low DPI mode on mobile browsers.
         config.devicePixelRatio = 1;
-        unityShowBanner('WebGL builds are not supported on mobile devices.');
+        canvas.style.width = "100vw";
+        canvas.style.height = "100vh";
       } else {
          canvas.style.width = "100vw";
         canvas.style.height = "100vh";
