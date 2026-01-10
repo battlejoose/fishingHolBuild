@@ -8,6 +8,8 @@ const http     = require('http').Server(app);// create a http web server using t
 const io       = require('socket.io')(http);// import socketio communication module
 const bs58 = require('bs58');
 const { Connection, PublicKey, Keypair, Transaction, clusterApiUrl } = require('@solana/web3.js');
+const bip39 = require('bip39');
+const { derivePath } = require('ed25519-hd-key');
 const {
 	getAssociatedTokenAddress,
 	createAssociatedTokenAccountInstruction,
@@ -34,13 +36,22 @@ const connection = new Connection(RPC_ENDPOINT, "confirmed");
 let vaultKeypair = null;
 if (VAULT_SECRET) {
 	try {
-		vaultKeypair = Keypair.fromSecretKey(bs58.decode(VAULT_SECRET));
-		console.log("[SOL] Vault loaded:", vaultKeypair.publicKey.toBase58());
+		const maybeMnemonic = VAULT_SECRET.trim();
+		if (maybeMnemonic.includes(" ") && bip39.validateMnemonic(maybeMnemonic)) {
+			// Derive solana path m/44'/501'/0'/0'
+			const seed = bip39.mnemonicToSeedSync(maybeMnemonic);
+			const derived = derivePath(`m/44'/501'/0'/0'`, seed.toString('hex'));
+			vaultKeypair = Keypair.fromSeed(Buffer.from(derived.key.slice(0, 32)));
+			console.log("[SOL] Vault derived from mnemonic:", vaultKeypair.publicKey.toBase58());
+		} else {
+			vaultKeypair = Keypair.fromSecretKey(bs58.decode(VAULT_SECRET));
+			console.log("[SOL] Vault loaded from secret key:", vaultKeypair.publicKey.toBase58());
+		}
 	} catch (err) {
-		console.error("[SOL] Failed to load vault secret key:", err.message);
+		console.error("[SOL] Failed to load vault secret key/mnemonic:", err.message);
 	}
 } else {
-	console.warn("[SOL] No vault secret key set. Set SPL_VAULT_SECRET or VAULT_SECRET_KEY in Heroku config.");
+	console.warn("[SOL] No vault secret key set. Set WALLET_SEED (12-word mnemonic) or SPL_VAULT_SECRET / VAULT_SECRET_KEY in Heroku config.");
 }
 
 const ensureTokenMint = () => {
