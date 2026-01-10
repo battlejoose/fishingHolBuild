@@ -2,12 +2,21 @@
 *@autor: Rio 3D Studios
 *@description:  java script server that works as master server of the Basic Example of WebGL Multiplayer Kit
 */
-var express  = require('express');//import express NodeJS framework module
-var app      = express();// create an object of the express module
-var http     = require('http').Server(app);// create a http web server using the http library
-var io       = require('socket.io')(http);// import socketio communication module
+const express  = require('express');//import express NodeJS framework module
+const app      = express();// create an object of the express module
+const http     = require('http').Server(app);// create a http web server using the http library
+const io       = require('socket.io')(http);// import socketio communication module
+const bs58 = require('bs58');
+const { Connection, PublicKey, Keypair, Transaction, clusterApiUrl } = require('@solana/web3.js');
+const {
+	getAssociatedTokenAddress,
+	createAssociatedTokenAccountInstruction,
+	createTransferInstruction,
+	TOKEN_PROGRAM_ID,
+	ASSOCIATED_TOKEN_PROGRAM_ID
+} = require('@solana/spl-token');
 
-
+app.use(express.json());
 app.use("/public/TemplateData",express.static(__dirname + "/public/TemplateData"));
 app.use("/public/Build",express.static(__dirname + "/public/Build"));
 app.use(express.static(__dirname+'/public'));
@@ -16,6 +25,120 @@ var clients			= [];// to storage clients
 var clientLookup = {};// clients search engine
 var sockets = {};//// to storage sockets
 
+const PORT = process.env.PORT || 3000;
+const RPC_ENDPOINT = process.env.SOLANA_RPC || clusterApiUrl("mainnet-beta");
+const TOKEN_MINT = process.env.TOKEN_MINT || process.env.SPL_TOKEN_MINT;
+const VAULT_SECRET = process.env.WALLET_SEED || process.env.SPL_VAULT_SECRET || process.env.VAULT_SECRET_KEY || process.env.VAULT_SECRET;
+const connection = new Connection(RPC_ENDPOINT, "confirmed");
+
+let vaultKeypair = null;
+if (VAULT_SECRET) {
+	try {
+		vaultKeypair = Keypair.fromSecretKey(bs58.decode(VAULT_SECRET));
+		console.log("[SOL] Vault loaded:", vaultKeypair.publicKey.toBase58());
+	} catch (err) {
+		console.error("[SOL] Failed to load vault secret key:", err.message);
+	}
+} else {
+	console.warn("[SOL] No vault secret key set. Set SPL_VAULT_SECRET or VAULT_SECRET_KEY in Heroku config.");
+}
+
+const ensureTokenMint = () => {
+	if (!TOKEN_MINT) {
+		throw new Error("SPL_TOKEN_MINT env var is missing");
+	}
+	return new PublicKey(TOKEN_MINT);
+};
+
+async function buildAndSendPayout(destination, rawAmount) {
+	if (!vaultKeypair) throw new Error("Vault keypair not configured");
+
+	const mint = ensureTokenMint();
+	const destinationPk = new PublicKey(destination);
+	const vaultPk = vaultKeypair.publicKey;
+	const vaultAta = await getAssociatedTokenAddress(mint, vaultPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+	const destAta = await getAssociatedTokenAddress(mint, destinationPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+
+	const instructions = [];
+
+	const vaultAtaInfo = await connection.getAccountInfo(vaultAta);
+	if (!vaultAtaInfo) {
+		instructions.push(
+			createAssociatedTokenAccountInstruction(vaultPk, vaultAta, vaultPk, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+		);
+	}
+
+	const destAtaInfo = await connection.getAccountInfo(destAta);
+	if (!destAtaInfo) {
+		instructions.push(
+			createAssociatedTokenAccountInstruction(vaultPk, destAta, destinationPk, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+		);
+	}
+
+	instructions.push(
+		createTransferInstruction(
+			vaultAta,
+			destAta,
+			vaultPk,
+			rawAmount,
+			[],
+			TOKEN_PROGRAM_ID
+		)
+	);
+
+	const blockhash = await connection.getLatestBlockhash();
+	const tx = new Transaction({
+		feePayer: vaultPk,
+		recentBlockhash: blockhash.blockhash
+	});
+
+	tx.add(...instructions);
+	tx.sign(vaultKeypair);
+
+	const signature = await connection.sendRawTransaction(tx.serialize());
+	await connection.confirmTransaction(
+		{
+			signature,
+			blockhash: blockhash.blockhash,
+			lastValidBlockHeight: blockhash.lastValidBlockHeight
+		},
+		"confirmed"
+	);
+
+	return signature;
+}
+
+app.get("/health", (_req, res) => {
+	res.json({
+		ok: true,
+		mint: TOKEN_MINT ?? null,
+		vault: vaultKeypair ? vaultKeypair.publicKey.toBase58() : null,
+		rpc: RPC_ENDPOINT
+	});
+});
+
+app.post("/payout", async (req, res) => {
+	try {
+		const { destination, amount, mint } = req.body || {};
+		if (!destination || !amount) {
+			return res.status(400).json({ error: "destination and amount are required" });
+		}
+		if (mint && TOKEN_MINT && mint !== TOKEN_MINT) {
+			return res.status(400).json({ error: "mint mismatch" });
+		}
+
+		const numericAmount = Number(amount);
+		if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+			return res.status(400).json({ error: "amount must be > 0" });
+		}
+
+		const signature = await buildAndSendPayout(destination, numericAmount);
+		res.json({ signature });
+	} catch (err) {
+		console.error("[SOL] payout error", err);
+		res.status(500).json({ error: err.message });
+	}
+});
 
 //open a connection with the specific client
 io.on('connection', function(socket){
@@ -172,7 +295,7 @@ io.on('connection', function(socket){
 });//END_IO.ON
 
 
-http.listen(process.env.PORT ||3000, function(){
-	console.log('listening on *:3000');
+http.listen(PORT, function(){
+	console.log('listening on *:' + PORT);
 });
 console.log("------- server is running -------");
