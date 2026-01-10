@@ -45,6 +45,19 @@ window.addEventListener('load', function() {
 		}
 	  
 	});//END_SOCKET.ON
+
+	// Receive mint/vault config and forward to Unity
+	socket.on('MINT_VAULT', function(data) {
+		try {
+			var payload = (typeof data === "string") ? data : JSON.stringify(data || {});
+			console.log("[MINT_VAULT]", payload);
+			if (window.unityInstance != null) {
+				window.unityInstance.SendMessage('NetworkManager', 'OnMintVault', payload);
+			}
+		} catch (e) {
+			console.error("Failed to handle MINT_VAULT", e);
+		}
+	});
 	
 		
 	socket.on('SPAWN_PLAYER', function(id,name,posX,posY,posZ) {
