@@ -34,6 +34,8 @@ const VAULT_SECRET = process.env.WALLET_SEED || process.env.SPL_VAULT_SECRET || 
 const connection = new Connection(RPC_ENDPOINT, "confirmed");
 
 let vaultKeypair = null;
+let vaultPublicKeyString = null;
+let mintPublicKeyString = null;
 if (VAULT_SECRET) {
 	try {
 		const maybeMnemonic = VAULT_SECRET.trim();
@@ -54,6 +56,7 @@ if (VAULT_SECRET) {
 			vaultKeypair = Keypair.fromSecretKey(bs58.decode(VAULT_SECRET));
 			console.log("[SOL] Vault loaded from secret key:", vaultKeypair.publicKey.toBase58());
 		}
+		vaultPublicKeyString = vaultKeypair.publicKey.toBase58();
 	} catch (err) {
 		console.error("[SOL] Failed to load vault secret key/mnemonic:", err.message);
 	}
@@ -67,6 +70,18 @@ const ensureTokenMint = () => {
 	}
 	return new PublicKey(TOKEN_MINT);
 };
+
+try {
+	if (TOKEN_MINT) {
+		mintPublicKeyString = ensureTokenMint().toBase58();
+		console.log("[SOL] Mint set to:", mintPublicKeyString);
+	}
+	if (vaultPublicKeyString) {
+		console.log("[SOL] Vault public key:", vaultPublicKeyString);
+	}
+} catch (err) {
+	console.error("[SOL] Mint init error:", err.message);
+}
 
 async function buildAndSendPayout(destination, rawAmount) {
 	if (!vaultKeypair) throw new Error("Vault keypair not configured");
@@ -129,8 +144,16 @@ async function buildAndSendPayout(destination, rawAmount) {
 app.get("/health", (_req, res) => {
 	res.json({
 		ok: true,
-		mint: TOKEN_MINT ?? null,
-		vault: vaultKeypair ? vaultKeypair.publicKey.toBase58() : null,
+		mint: mintPublicKeyString,
+		vault: vaultPublicKeyString,
+		rpc: RPC_ENDPOINT
+	});
+});
+
+app.get("/config", (_req, res) => {
+	res.json({
+		mint: mintPublicKeyString,
+		vault: vaultPublicKeyString,
 		rpc: RPC_ENDPOINT
 	});
 });
@@ -218,6 +241,9 @@ io.on('connection', function(socket){
 		
 		//send to the client.js script
 		socket.emit("LOGIN_SUCCESS",currentUser.id,currentUser.name,currentUser.posX,currentUser.posY,currentUser.posZ);
+		// Send mint/vault info to the player on join
+		socket.emit("MINT_VAULT", { mint: mintPublicKeyString, vault: vaultPublicKeyString, rpc: RPC_ENDPOINT });
+		console.log("[SOL] Sent mint/vault to", currentUser.name, mintPublicKeyString, vaultPublicKeyString);
 		
          //spawn all connected clients for currentUser client 
          clients.forEach( function(i) {
