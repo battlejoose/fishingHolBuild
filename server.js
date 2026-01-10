@@ -37,13 +37,20 @@ let vaultKeypair = null;
 if (VAULT_SECRET) {
 	try {
 		const maybeMnemonic = VAULT_SECRET.trim();
-		if (maybeMnemonic.includes(" ") && bip39.validateMnemonic(maybeMnemonic)) {
-			// Derive solana path m/44'/501'/0'/0'
-			const seed = bip39.mnemonicToSeedSync(maybeMnemonic);
-			const derived = derivePath(`m/44'/501'/0'/0'`, seed.toString('hex'));
-			vaultKeypair = Keypair.fromSeed(Buffer.from(derived.key.slice(0, 32)));
-			console.log("[SOL] Vault derived from mnemonic:", vaultKeypair.publicKey.toBase58());
-		} else {
+		if (maybeMnemonic.includes(" ")) {
+			// Treat any space-separated input as mnemonic; derive and only fall back if derivation fails
+			try {
+				const seed = bip39.mnemonicToSeedSync(maybeMnemonic);
+				const derived = derivePath(`m/44'/501'/0'/0'`, seed.toString('hex'));
+				vaultKeypair = Keypair.fromSeed(Buffer.from(derived.key.slice(0, 32)));
+				console.log("[SOL] Vault derived from WALLET_SEED mnemonic:", vaultKeypair.publicKey.toBase58());
+			} catch (mnemonicErr) {
+				console.error("[SOL] Failed to derive from WALLET_SEED mnemonic:", mnemonicErr.message);
+			}
+		}
+
+		// If mnemonic path failed or no spaces, attempt base58 secret key
+		if (!vaultKeypair) {
 			vaultKeypair = Keypair.fromSecretKey(bs58.decode(VAULT_SECRET));
 			console.log("[SOL] Vault loaded from secret key:", vaultKeypair.publicKey.toBase58());
 		}
