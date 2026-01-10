@@ -184,16 +184,14 @@ app.get("/health", (_req, res) => {
 	res.json({
 		ok: true,
 		mint: mintPublicKeyString,
-		vault: vaultPublicKeyString,
-		rpc: RPC_ENDPOINT
+		vault: vaultPublicKeyString
 	});
 });
 
 app.get("/config", (_req, res) => {
 	res.json({
 		mint: mintPublicKeyString,
-		vault: vaultPublicKeyString,
-		rpc: RPC_ENDPOINT
+		vault: vaultPublicKeyString
 	});
 });
 
@@ -281,8 +279,8 @@ io.on('connection', function(socket){
 		//send to the client.js script
 		socket.emit("LOGIN_SUCCESS",currentUser.id,currentUser.name,currentUser.posX,currentUser.posY,currentUser.posZ);
 		// Send mint/vault info to the player on join
-		socket.emit("MINT_VAULT", { mint: mintPublicKeyString, vault: vaultPublicKeyString, rpc: RPC_ENDPOINT });
-		console.log("[SOL] Sent mint/vault to", currentUser.name, mintPublicKeyString, vaultPublicKeyString);
+		socket.emit("MINT_VAULT", { mint: mintPublicKeyString, vault: vaultPublicKeyString });
+		console.log("[SOL] Sent mint/vault to", currentUser.name);
 		
          //spawn all connected clients for currentUser client 
          clients.forEach( function(i) {

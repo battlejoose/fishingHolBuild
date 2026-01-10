@@ -49,8 +49,9 @@ window.addEventListener('load', function() {
 	// Receive mint/vault config and forward to Unity
 	socket.on('MINT_VAULT', function(data) {
 		try {
-			var payload = (typeof data === "string") ? data : JSON.stringify(data || {});
-			console.log("[MINT_VAULT]", payload);
+			var payloadObj = data || {};
+			// Do not log RPC endpoints; only forward mint/vault
+			var payload = JSON.stringify({ mint: payloadObj.mint, vault: payloadObj.vault });
 			if (window.unityInstance != null) {
 				window.unityInstance.SendMessage('NetworkManager', 'OnMintVault', payload);
 			}
