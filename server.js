@@ -92,7 +92,21 @@ async function buildAndSendPayout(destination, rawAmount) {
 	const vaultAta = await getAssociatedTokenAddress(mint, vaultPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
 	const destAta = await getAssociatedTokenAddress(mint, destinationPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
 
+	const rawAmountBig = BigInt(rawAmount);
+
 	const instructions = [];
+
+	// Log balances to help troubleshoot "no record of prior credit"
+	let vaultBalLamports = null;
+	let vaultBalUi = null;
+	try {
+		const vaultBal = await connection.getTokenAccountBalance(vaultAta);
+		vaultBalLamports = vaultBal?.value?.amount ? BigInt(vaultBal.value.amount) : null;
+		vaultBalUi = vaultBal?.value?.uiAmountString;
+		console.log("[SOL] Vault ATA", vaultAta.toBase58(), "balance", vaultBalUi, "raw", vaultBal?.value?.amount);
+	} catch (e) {
+		console.log("[SOL] Vault ATA balance fetch failed (likely missing):", e.message);
+	}
 
 	const vaultAtaInfo = await connection.getAccountInfo(vaultAta);
 	if (!vaultAtaInfo) {
@@ -108,12 +122,17 @@ async function buildAndSendPayout(destination, rawAmount) {
 		);
 	}
 
+	if (vaultBalLamports !== null && vaultBalLamports < rawAmountBig) {
+		console.error("[SOL] Vault token balance too low for payout. needed", rawAmountBig.toString(), "have", vaultBalLamports.toString());
+		throw new Error("Vault token balance too low for payout");
+	}
+
 	instructions.push(
 		createTransferInstruction(
 			vaultAta,
 			destAta,
 			vaultPk,
-			rawAmount,
+			rawAmountBig,
 			[],
 			TOKEN_PROGRAM_ID
 		)
@@ -128,7 +147,27 @@ async function buildAndSendPayout(destination, rawAmount) {
 	tx.add(...instructions);
 	tx.sign(vaultKeypair);
 
-	const signature = await connection.sendRawTransaction(tx.serialize());
+	// Optional simulation to surface logs before sending
+	try {
+		const sim = await connection.simulateTransaction(tx, [vaultKeypair]);
+		if (sim?.value?.err) {
+			console.error("[SOL] Simulation error", sim.value.err, "logs", sim.value.logs);
+			throw new Error("Simulation failed: " + JSON.stringify(sim.value.err));
+		}
+	} catch (simErr) {
+		console.error("[SOL] simulateTransaction failed", simErr.message);
+		throw simErr;
+	}
+
+	const serialized = tx.serialize();
+	let signature = "";
+	try {
+		signature = await connection.sendRawTransaction(serialized);
+	} catch (err) {
+		console.error("[SOL] sendRawTransaction error", err);
+		throw err;
+	}
+
 	await connection.confirmTransaction(
 		{
 			signature,
