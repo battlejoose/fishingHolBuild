@@ -17,6 +17,7 @@ const {
 	TOKEN_PROGRAM_ID,
 	ASSOCIATED_TOKEN_PROGRAM_ID
 } = require('@solana/spl-token');
+const { Pool } = require('pg');
 
 app.use(express.json());
 app.use("/public/TemplateData",express.static(__dirname + "/public/TemplateData"));
@@ -31,6 +32,7 @@ const PORT = process.env.PORT || 3000;
 const RPC_ENDPOINT = process.env.SOLANA_RPC || clusterApiUrl("mainnet-beta");
 const TOKEN_MINT = process.env.TOKEN_MINT || process.env.SPL_TOKEN_MINT;
 const VAULT_SECRET = process.env.WALLET_SEED || process.env.SPL_VAULT_SECRET || process.env.VAULT_SECRET_KEY || process.env.VAULT_SECRET;
+const DATABASE_URL = process.env.DATABASE_URL;
 const connection = new Connection(RPC_ENDPOINT, "confirmed");
 
 let vaultKeypair = null;
@@ -180,19 +182,114 @@ async function buildAndSendPayout(destination, rawAmount) {
 	return signature;
 }
 
+// -------------------- Postgres Inventory Store --------------------
+let pgPool = null;
+if (DATABASE_URL) {
+	try {
+		pgPool = new Pool({
+			connectionString: DATABASE_URL,
+			ssl: { rejectUnauthorized: false }
+		});
+		console.log("[INV] Postgres pool created");
+	} catch (err) {
+		console.error("[INV] Failed to create Postgres pool:", err.message);
+	}
+} else {
+	console.warn("[INV] DATABASE_URL not set; inventory persistence disabled.");
+}
+
+const ensureInventoryTable = async () => {
+	if (!pgPool) return;
+	const createSql = `
+		CREATE TABLE IF NOT EXISTS player_inventory (
+			wallet TEXT PRIMARY KEY,
+			inventory JSONB NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+	`;
+	await pgPool.query(createSql);
+	console.log("[INV] player_inventory table ready");
+};
+
+const defaultInventory = () => ({
+	coins: 100,
+	rod: { owned: true },
+	floater: { count: 1, used: true },
+	spinner: { count: 0, used: false },
+	worm: { count: 1, used: true },
+	cheese: { count: 0, used: false },
+	baits: { floaterUsed: true, spinnerUsed: false, wormUsed: true, cheeseUsed: false },
+	backpack: { unlocked: true },
+	fishStats: { catched: 0, bestSize: "00 cm", bestName: "" }
+});
+
+const getInventory = async (wallet) => {
+	if (!pgPool) return { inventory: defaultInventory(), created: true };
+	const res = await pgPool.query("SELECT inventory FROM player_inventory WHERE wallet=$1", [wallet]);
+	if (res.rows.length === 0) {
+		const inv = defaultInventory();
+		await pgPool.query("INSERT INTO player_inventory (wallet, inventory) VALUES ($1, $2)", [wallet, inv]);
+		console.log("[INV] Seeded new inventory for", wallet);
+		return { inventory: inv, created: true };
+	}
+	return { inventory: res.rows[0].inventory, created: false };
+};
+
+const saveInventory = async (wallet, inventory) => {
+	if (!pgPool) return;
+	await pgPool.query(
+		`INSERT INTO player_inventory (wallet, inventory) VALUES ($1, $2)
+		 ON CONFLICT (wallet) DO UPDATE SET inventory = EXCLUDED.inventory, updated_at = NOW()`,
+		[wallet, inventory]
+	);
+	console.log("[INV] Saved inventory for", wallet);
+};
+
+// init table
+(async () => {
+	try { await ensureInventoryTable(); } catch (e) { console.error("[INV] ensure table error", e.message); }
+})();
+
 app.get("/health", (_req, res) => {
 	res.json({
 		ok: true,
 		mint: mintPublicKeyString,
-		vault: vaultPublicKeyString
+		vault: vaultPublicKeyString,
+		rpc: RPC_ENDPOINT
 	});
 });
 
 app.get("/config", (_req, res) => {
 	res.json({
 		mint: mintPublicKeyString,
-		vault: vaultPublicKeyString
+		vault: vaultPublicKeyString,
+		rpc: RPC_ENDPOINT
 	});
+});
+
+// Inventory REST API
+app.get("/inventory/:wallet", async (req, res) => {
+	const wallet = (req.params.wallet || "").trim();
+	if (!wallet) return res.status(400).json({ error: "wallet required" });
+	try {
+		const result = await getInventory(wallet);
+		res.json({ wallet, created: result.created, inventory: result.inventory });
+	} catch (err) {
+		console.error("[INV] fetch error", err);
+		res.status(500).json({ error: err.message });
+	}
+});
+
+app.post("/inventory", async (req, res) => {
+	const { wallet, inventory } = req.body || {};
+	if (!wallet || !inventory) return res.status(400).json({ error: "wallet and inventory required" });
+	try {
+		await saveInventory(wallet, inventory);
+		res.json({ ok: true, wallet });
+	} catch (err) {
+		console.error("[INV] save error", err);
+		res.status(500).json({ error: err.message });
+	}
 });
 
 app.post("/payout", async (req, res) => {
@@ -279,8 +376,8 @@ io.on('connection', function(socket){
 		//send to the client.js script
 		socket.emit("LOGIN_SUCCESS",currentUser.id,currentUser.name,currentUser.posX,currentUser.posY,currentUser.posZ);
 		// Send mint/vault info to the player on join
-		socket.emit("MINT_VAULT", { mint: mintPublicKeyString, vault: vaultPublicKeyString });
-		console.log("[SOL] Sent mint/vault to", currentUser.name);
+		socket.emit("MINT_VAULT", { mint: mintPublicKeyString, vault: vaultPublicKeyString, rpc: RPC_ENDPOINT });
+		console.log("[SOL] Sent mint/vault to", currentUser.name, mintPublicKeyString, vaultPublicKeyString);
 		
          //spawn all connected clients for currentUser client 
          clients.forEach( function(i) {
@@ -298,6 +395,37 @@ io.on('connection', function(socket){
 		
   
 	});//END_SOCKET_ON
+	
+	// Inventory fetch via socket
+	socket.on('INVENTORY_FETCH', async function (_data) {
+		try {
+			const data = typeof _data === "string" ? JSON.parse(_data) : _data || {};
+			const wallet = (data.wallet || "").trim();
+			if (!wallet) return socket.emit("INVENTORY_ERROR", { error: "wallet required" });
+			const result = await getInventory(wallet);
+			socket.emit("INVENTORY_DATA", { wallet, created: result.created, inventory: result.inventory });
+			console.log("[INV] Sent inventory for", wallet, "created?", result.created);
+		} catch (err) {
+			console.error("[INV] socket fetch error", err.message);
+			socket.emit("INVENTORY_ERROR", { error: err.message });
+		}
+	});
+	
+	// Inventory save via socket
+	socket.on('INVENTORY_SAVE', async function (_data) {
+		try {
+			const data = typeof _data === "string" ? JSON.parse(_data) : _data || {};
+			const wallet = (data.wallet || "").trim();
+			const inventory = data.inventory;
+			if (!wallet || !inventory) return socket.emit("INVENTORY_ERROR", { error: "wallet and inventory required" });
+			await saveInventory(wallet, inventory);
+			socket.emit("INVENTORY_SAVE_OK", { ok: true, wallet });
+			console.log("[INV] Inventory saved via socket for", wallet);
+		} catch (err) {
+			console.error("[INV] socket save error", err.message);
+			socket.emit("INVENTORY_ERROR", { error: err.message });
+		}
+	});
 	
 	
 	
