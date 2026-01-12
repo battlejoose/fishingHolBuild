@@ -211,17 +211,74 @@ const ensureInventoryTable = async () => {
 	console.log("[INV] player_inventory table ready");
 };
 
+// Flat inventory schema expected by Unity InventorySync
 const defaultInventory = () => ({
 	coins: 100,
-	rod: { owned: true },
-	floater: { count: 1, used: true },
-	spinner: { count: 0, used: false },
-	worm: { count: 1, used: true },
-	cheese: { count: 0, used: false },
-	baits: { floaterUsed: true, spinnerUsed: false, wormUsed: true, cheeseUsed: false },
-	backpack: { unlocked: true },
-	fishStats: { catched: 0, bestSize: "00 cm", bestName: "" }
+	rodOwned: true,
+	floaterCount: 1,
+	floaterUsed: true,
+	spinnerCount: 0,
+	spinnerUsed: false,
+	wormCount: 1,
+	wormUsed: true,
+	cheeseCount: 0,
+	cheeseUsed: false,
+	backpackUnlocked: true,
+	catched: 0,
+	bestSize: "00 cm",
+	bestName: ""
 });
+
+// Normalize legacy/nested shapes into the flat schema
+const normalizeInventory = (inv) => {
+	if (!inv || typeof inv !== "object") return defaultInventory();
+	const out = defaultInventory();
+	// Coins
+	if (inv.coins !== undefined) out.coins = Number(inv.coins) || 0;
+	// Rod
+	if (inv.rodOwned !== undefined) out.rodOwned = !!inv.rodOwned;
+	if (inv.rod && typeof inv.rod.owned === "boolean") out.rodOwned = inv.rod.owned;
+	// Floater
+	if (inv.floaterCount !== undefined) out.floaterCount = Number(inv.floaterCount) || 0;
+	if (inv.floater && inv.floater.count !== undefined) out.floaterCount = Number(inv.floater.count) || 0;
+	if (inv.floaterUsed !== undefined) out.floaterUsed = !!inv.floaterUsed;
+	if (inv.floater && inv.floater.used !== undefined) out.floaterUsed = !!inv.floater.used;
+	// Spinner
+	if (inv.spinnerCount !== undefined) out.spinnerCount = Number(inv.spinnerCount) || 0;
+	if (inv.spinner && inv.spinner.count !== undefined) out.spinnerCount = Number(inv.spinner.count) || 0;
+	if (inv.spinnerUsed !== undefined) out.spinnerUsed = !!inv.spinnerUsed;
+	if (inv.spinner && inv.spinner.used !== undefined) out.spinnerUsed = !!inv.spinner.used;
+	// Worm
+	if (inv.wormCount !== undefined) out.wormCount = Number(inv.wormCount) || 0;
+	if (inv.worm && inv.worm.count !== undefined) out.wormCount = Number(inv.worm.count) || 0;
+	if (inv.wormUsed !== undefined) out.wormUsed = !!inv.wormUsed;
+	if (inv.worm && inv.worm.used !== undefined) out.wormUsed = !!inv.worm.used;
+	// Cheese
+	if (inv.cheeseCount !== undefined) out.cheeseCount = Number(inv.cheeseCount) || 0;
+	if (inv.cheese && inv.cheese.count !== undefined) out.cheeseCount = Number(inv.cheese.count) || 0;
+	if (inv.cheeseUsed !== undefined) out.cheeseUsed = !!inv.cheeseUsed;
+	if (inv.cheese && inv.cheese.used !== undefined) out.cheeseUsed = !!inv.cheese.used;
+	// Baits aggregate
+	if (inv.baits) {
+		if (inv.baits.floaterUsed !== undefined) out.floaterUsed = !!inv.baits.floaterUsed;
+		if (inv.baits.spinnerUsed !== undefined) out.spinnerUsed = !!inv.baits.spinnerUsed;
+		if (inv.baits.wormUsed !== undefined) out.wormUsed = !!inv.baits.wormUsed;
+		if (inv.baits.cheeseUsed !== undefined) out.cheeseUsed = !!inv.baits.cheeseUsed;
+	}
+	// Backpack
+	if (inv.backpackUnlocked !== undefined) out.backpackUnlocked = !!inv.backpackUnlocked;
+	if (inv.backpack && inv.backpack.unlocked !== undefined) out.backpackUnlocked = !!inv.backpack.unlocked;
+	// Fish stats
+	if (inv.catched !== undefined) out.catched = Number(inv.catched) || 0;
+	if (inv.fishStats) {
+		if (inv.fishStats.catched !== undefined) out.catched = Number(inv.fishStats.catched) || 0;
+		if (inv.fishStats.bestSize !== undefined) out.bestSize = inv.fishStats.bestSize || "00 cm";
+		if (inv.fishStats.bestName !== undefined) out.bestName = inv.fishStats.bestName || "";
+	}
+	if (inv.bestSize !== undefined) out.bestSize = inv.bestSize || "00 cm";
+	if (inv.bestName !== undefined) out.bestName = inv.bestName || "";
+	return out;
+};
 
 const getInventory = async (wallet) => {
 	if (!pgPool) return { inventory: defaultInventory(), created: true };
@@ -232,15 +289,17 @@ const getInventory = async (wallet) => {
 		console.log("[INV] Seeded new inventory for", wallet);
 		return { inventory: inv, created: true };
 	}
-	return { inventory: res.rows[0].inventory, created: false };
+	const normalized = normalizeInventory(res.rows[0].inventory);
+	return { inventory: normalized, created: false };
 };
 
 const saveInventory = async (wallet, inventory) => {
 	if (!pgPool) return;
+	const normalized = normalizeInventory(inventory);
 	await pgPool.query(
 		`INSERT INTO player_inventory (wallet, inventory) VALUES ($1, $2)
 		 ON CONFLICT (wallet) DO UPDATE SET inventory = EXCLUDED.inventory, updated_at = NOW()`,
-		[wallet, inventory]
+		[wallet, normalized]
 	);
 	console.log("[INV] Saved inventory for", wallet);
 };
