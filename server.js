@@ -226,7 +226,8 @@ const defaultInventory = () => ({
 	backpackUnlocked: true,
 	catched: 0,
 	bestSize: "00 cm",
-	bestName: ""
+	bestName: "",
+	fishCounts: [] // array of { code, count }
 });
 
 // Normalize legacy/nested shapes into the flat schema
@@ -277,6 +278,12 @@ const normalizeInventory = (inv) => {
 	}
 	if (inv.bestSize !== undefined) out.bestSize = inv.bestSize || "00 cm";
 	if (inv.bestName !== undefined) out.bestName = inv.bestName || "";
+	// Fish counts
+	if (Array.isArray(inv.fishCounts)) {
+		out.fishCounts = inv.fishCounts
+			.filter((f) => f && f.code && Number(f.count) > 0)
+			.map((f) => ({ code: String(f.code), count: Number(f.count) || 0 }));
+	}
 	return out;
 };
 
