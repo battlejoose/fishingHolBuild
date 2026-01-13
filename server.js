@@ -17,6 +17,7 @@ const {
 	TOKEN_PROGRAM_ID,
 	ASSOCIATED_TOKEN_PROGRAM_ID
 } = require('@solana/spl-token');
+const { Pool } = require('pg');
 
 app.use(express.json());
 app.use("/public/TemplateData",express.static(__dirname + "/public/TemplateData"));
@@ -31,22 +32,33 @@ const PORT = process.env.PORT || 3000;
 const RPC_ENDPOINT = process.env.SOLANA_RPC || clusterApiUrl("mainnet-beta");
 const TOKEN_MINT = process.env.TOKEN_MINT || process.env.SPL_TOKEN_MINT;
 const VAULT_SECRET = process.env.WALLET_SEED || process.env.SPL_VAULT_SECRET || process.env.VAULT_SECRET_KEY || process.env.VAULT_SECRET;
+const DATABASE_URL = process.env.DATABASE_URL;
 const connection = new Connection(RPC_ENDPOINT, "confirmed");
 
 let vaultKeypair = null;
+let vaultPublicKeyString = null;
+let mintPublicKeyString = null;
 if (VAULT_SECRET) {
 	try {
 		const maybeMnemonic = VAULT_SECRET.trim();
-		if (maybeMnemonic.includes(" ") && bip39.validateMnemonic(maybeMnemonic)) {
-			// Derive solana path m/44'/501'/0'/0'
-			const seed = bip39.mnemonicToSeedSync(maybeMnemonic);
-			const derived = derivePath(`m/44'/501'/0'/0'`, seed.toString('hex'));
-			vaultKeypair = Keypair.fromSeed(Buffer.from(derived.key.slice(0, 32)));
-			console.log("[SOL] Vault derived from mnemonic:", vaultKeypair.publicKey.toBase58());
-		} else {
+		if (maybeMnemonic.includes(" ")) {
+			// Treat any space-separated input as mnemonic; derive and only fall back if derivation fails
+			try {
+				const seed = bip39.mnemonicToSeedSync(maybeMnemonic);
+				const derived = derivePath(`m/44'/501'/0'/0'`, seed.toString('hex'));
+				vaultKeypair = Keypair.fromSeed(Buffer.from(derived.key.slice(0, 32)));
+				console.log("[SOL] Vault derived from WALLET_SEED mnemonic:", vaultKeypair.publicKey.toBase58());
+			} catch (mnemonicErr) {
+				console.error("[SOL] Failed to derive from WALLET_SEED mnemonic:", mnemonicErr.message);
+			}
+		}
+
+		// If mnemonic path failed or no spaces, attempt base58 secret key
+		if (!vaultKeypair) {
 			vaultKeypair = Keypair.fromSecretKey(bs58.decode(VAULT_SECRET));
 			console.log("[SOL] Vault loaded from secret key:", vaultKeypair.publicKey.toBase58());
 		}
+		vaultPublicKeyString = vaultKeypair.publicKey.toBase58();
 	} catch (err) {
 		console.error("[SOL] Failed to load vault secret key/mnemonic:", err.message);
 	}
@@ -61,6 +73,18 @@ const ensureTokenMint = () => {
 	return new PublicKey(TOKEN_MINT);
 };
 
+try {
+	if (TOKEN_MINT) {
+		mintPublicKeyString = ensureTokenMint().toBase58();
+		console.log("[SOL] Mint set to:", mintPublicKeyString);
+	}
+	if (vaultPublicKeyString) {
+		console.log("[SOL] Vault public key:", vaultPublicKeyString);
+	}
+} catch (err) {
+	console.error("[SOL] Mint init error:", err.message);
+}
+
 async function buildAndSendPayout(destination, rawAmount) {
 	if (!vaultKeypair) throw new Error("Vault keypair not configured");
 
@@ -70,7 +94,21 @@ async function buildAndSendPayout(destination, rawAmount) {
 	const vaultAta = await getAssociatedTokenAddress(mint, vaultPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
 	const destAta = await getAssociatedTokenAddress(mint, destinationPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
 
+	const rawAmountBig = BigInt(rawAmount);
+
 	const instructions = [];
+
+	// Log balances to help troubleshoot "no record of prior credit"
+	let vaultBalLamports = null;
+	let vaultBalUi = null;
+	try {
+		const vaultBal = await connection.getTokenAccountBalance(vaultAta);
+		vaultBalLamports = vaultBal?.value?.amount ? BigInt(vaultBal.value.amount) : null;
+		vaultBalUi = vaultBal?.value?.uiAmountString;
+		console.log("[SOL] Vault ATA", vaultAta.toBase58(), "balance", vaultBalUi, "raw", vaultBal?.value?.amount);
+	} catch (e) {
+		console.log("[SOL] Vault ATA balance fetch failed (likely missing):", e.message);
+	}
 
 	const vaultAtaInfo = await connection.getAccountInfo(vaultAta);
 	if (!vaultAtaInfo) {
@@ -86,12 +124,17 @@ async function buildAndSendPayout(destination, rawAmount) {
 		);
 	}
 
+	if (vaultBalLamports !== null && vaultBalLamports < rawAmountBig) {
+		console.error("[SOL] Vault token balance too low for payout. needed", rawAmountBig.toString(), "have", vaultBalLamports.toString());
+		throw new Error("Vault token balance too low for payout");
+	}
+
 	instructions.push(
 		createTransferInstruction(
 			vaultAta,
 			destAta,
 			vaultPk,
-			rawAmount,
+			rawAmountBig,
 			[],
 			TOKEN_PROGRAM_ID
 		)
@@ -106,7 +149,27 @@ async function buildAndSendPayout(destination, rawAmount) {
 	tx.add(...instructions);
 	tx.sign(vaultKeypair);
 
-	const signature = await connection.sendRawTransaction(tx.serialize());
+	// Optional simulation to surface logs before sending
+	try {
+		const sim = await connection.simulateTransaction(tx, [vaultKeypair]);
+		if (sim?.value?.err) {
+			console.error("[SOL] Simulation error", sim.value.err, "logs", sim.value.logs);
+			throw new Error("Simulation failed: " + JSON.stringify(sim.value.err));
+		}
+	} catch (simErr) {
+		console.error("[SOL] simulateTransaction failed", simErr.message);
+		throw simErr;
+	}
+
+	const serialized = tx.serialize();
+	let signature = "";
+	try {
+		signature = await connection.sendRawTransaction(serialized);
+	} catch (err) {
+		console.error("[SOL] sendRawTransaction error", err);
+		throw err;
+	}
+
 	await connection.confirmTransaction(
 		{
 			signature,
@@ -119,13 +182,180 @@ async function buildAndSendPayout(destination, rawAmount) {
 	return signature;
 }
 
+// -------------------- Postgres Inventory Store --------------------
+let pgPool = null;
+if (DATABASE_URL) {
+	try {
+		pgPool = new Pool({
+			connectionString: DATABASE_URL,
+			ssl: { rejectUnauthorized: false }
+		});
+		console.log("[INV] Postgres pool created");
+	} catch (err) {
+		console.error("[INV] Failed to create Postgres pool:", err.message);
+	}
+} else {
+	console.warn("[INV] DATABASE_URL not set; inventory persistence disabled.");
+}
+
+const ensureInventoryTable = async () => {
+	if (!pgPool) return;
+	const createSql = `
+		CREATE TABLE IF NOT EXISTS player_inventory (
+			wallet TEXT PRIMARY KEY,
+			inventory JSONB NOT NULL,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		);
+	`;
+	await pgPool.query(createSql);
+	console.log("[INV] player_inventory table ready");
+};
+
+// Flat inventory schema expected by Unity InventorySync
+const defaultInventory = () => ({
+	coins: 100,
+	rodOwned: true,
+	floaterCount: 1,
+	floaterUsed: true,
+	spinnerCount: 0,
+	spinnerUsed: false,
+	wormCount: 1,
+	wormUsed: true,
+	cheeseCount: 0,
+	cheeseUsed: false,
+	backpackUnlocked: true,
+	catched: 0,
+	bestSize: "00 cm",
+	bestName: "",
+	fishCounts: [] // array of { code, count }
+});
+
+// Normalize legacy/nested shapes into the flat schema
+const normalizeInventory = (inv) => {
+	if (!inv || typeof inv !== "object") return defaultInventory();
+	const out = defaultInventory();
+	// Coins
+	if (inv.coins !== undefined) out.coins = Number(inv.coins) || 0;
+	// Rod
+	if (inv.rodOwned !== undefined) out.rodOwned = !!inv.rodOwned;
+	if (inv.rod && typeof inv.rod.owned === "boolean") out.rodOwned = inv.rod.owned;
+	// Floater
+	if (inv.floaterCount !== undefined) out.floaterCount = Number(inv.floaterCount) || 0;
+	if (inv.floater && inv.floater.count !== undefined) out.floaterCount = Number(inv.floater.count) || 0;
+	if (inv.floaterUsed !== undefined) out.floaterUsed = !!inv.floaterUsed;
+	if (inv.floater && inv.floater.used !== undefined) out.floaterUsed = !!inv.floater.used;
+	// Spinner
+	if (inv.spinnerCount !== undefined) out.spinnerCount = Number(inv.spinnerCount) || 0;
+	if (inv.spinner && inv.spinner.count !== undefined) out.spinnerCount = Number(inv.spinner.count) || 0;
+	if (inv.spinnerUsed !== undefined) out.spinnerUsed = !!inv.spinnerUsed;
+	if (inv.spinner && inv.spinner.used !== undefined) out.spinnerUsed = !!inv.spinner.used;
+	// Worm
+	if (inv.wormCount !== undefined) out.wormCount = Number(inv.wormCount) || 0;
+	if (inv.worm && inv.worm.count !== undefined) out.wormCount = Number(inv.worm.count) || 0;
+	if (inv.wormUsed !== undefined) out.wormUsed = !!inv.wormUsed;
+	if (inv.worm && inv.worm.used !== undefined) out.wormUsed = !!inv.worm.used;
+	// Cheese
+	if (inv.cheeseCount !== undefined) out.cheeseCount = Number(inv.cheeseCount) || 0;
+	if (inv.cheese && inv.cheese.count !== undefined) out.cheeseCount = Number(inv.cheese.count) || 0;
+	if (inv.cheeseUsed !== undefined) out.cheeseUsed = !!inv.cheeseUsed;
+	if (inv.cheese && inv.cheese.used !== undefined) out.cheeseUsed = !!inv.cheese.used;
+	// Baits aggregate
+	if (inv.baits) {
+		if (inv.baits.floaterUsed !== undefined) out.floaterUsed = !!inv.baits.floaterUsed;
+		if (inv.baits.spinnerUsed !== undefined) out.spinnerUsed = !!inv.baits.spinnerUsed;
+		if (inv.baits.wormUsed !== undefined) out.wormUsed = !!inv.baits.wormUsed;
+		if (inv.baits.cheeseUsed !== undefined) out.cheeseUsed = !!inv.baits.cheeseUsed;
+	}
+	// Backpack
+	if (inv.backpackUnlocked !== undefined) out.backpackUnlocked = !!inv.backpackUnlocked;
+	if (inv.backpack && inv.backpack.unlocked !== undefined) out.backpackUnlocked = !!inv.backpack.unlocked;
+	// Fish stats
+	if (inv.catched !== undefined) out.catched = Number(inv.catched) || 0;
+	if (inv.fishStats) {
+		if (inv.fishStats.catched !== undefined) out.catched = Number(inv.fishStats.catched) || 0;
+		if (inv.fishStats.bestSize !== undefined) out.bestSize = inv.fishStats.bestSize || "00 cm";
+		if (inv.fishStats.bestName !== undefined) out.bestName = inv.fishStats.bestName || "";
+	}
+	if (inv.bestSize !== undefined) out.bestSize = inv.bestSize || "00 cm";
+	if (inv.bestName !== undefined) out.bestName = inv.bestName || "";
+	// Fish counts
+	if (Array.isArray(inv.fishCounts)) {
+		out.fishCounts = inv.fishCounts
+			.filter((f) => f && f.code && Number(f.count) > 0)
+			.map((f) => ({ code: String(f.code), count: Number(f.count) || 0 }));
+	}
+	return out;
+};
+
+const getInventory = async (wallet) => {
+	if (!pgPool) return { inventory: defaultInventory(), created: true };
+	const res = await pgPool.query("SELECT inventory FROM player_inventory WHERE wallet=$1", [wallet]);
+	if (res.rows.length === 0) {
+		const inv = defaultInventory();
+		await pgPool.query("INSERT INTO player_inventory (wallet, inventory) VALUES ($1, $2)", [wallet, inv]);
+		console.log("[INV] Seeded new inventory for", wallet);
+		return { inventory: inv, created: true };
+	}
+	const normalized = normalizeInventory(res.rows[0].inventory);
+	return { inventory: normalized, created: false };
+};
+
+const saveInventory = async (wallet, inventory) => {
+	if (!pgPool) return;
+	const normalized = normalizeInventory(inventory);
+	await pgPool.query(
+		`INSERT INTO player_inventory (wallet, inventory) VALUES ($1, $2)
+		 ON CONFLICT (wallet) DO UPDATE SET inventory = EXCLUDED.inventory, updated_at = NOW()`,
+		[wallet, normalized]
+	);
+	console.log("[INV] Saved inventory for", wallet);
+};
+
+// init table
+(async () => {
+	try { await ensureInventoryTable(); } catch (e) { console.error("[INV] ensure table error", e.message); }
+})();
+
 app.get("/health", (_req, res) => {
 	res.json({
 		ok: true,
-		mint: TOKEN_MINT ?? null,
-		vault: vaultKeypair ? vaultKeypair.publicKey.toBase58() : null,
+		mint: mintPublicKeyString,
+		vault: vaultPublicKeyString,
 		rpc: RPC_ENDPOINT
 	});
+});
+
+app.get("/config", (_req, res) => {
+	res.json({
+		mint: mintPublicKeyString,
+		vault: vaultPublicKeyString,
+		rpc: RPC_ENDPOINT
+	});
+});
+
+// Inventory REST API
+app.get("/inventory/:wallet", async (req, res) => {
+	const wallet = (req.params.wallet || "").trim();
+	if (!wallet) return res.status(400).json({ error: "wallet required" });
+	try {
+		const result = await getInventory(wallet);
+		res.json({ wallet, created: result.created, inventory: result.inventory });
+	} catch (err) {
+		console.error("[INV] fetch error", err);
+		res.status(500).json({ error: err.message });
+	}
+});
+
+app.post("/inventory", async (req, res) => {
+	const { wallet, inventory } = req.body || {};
+	if (!wallet || !inventory) return res.status(400).json({ error: "wallet and inventory required" });
+	try {
+		await saveInventory(wallet, inventory);
+		res.json({ ok: true, wallet });
+	} catch (err) {
+		console.error("[INV] save error", err);
+		res.status(500).json({ error: err.message });
+	}
 });
 
 app.post("/payout", async (req, res) => {
@@ -211,6 +441,9 @@ io.on('connection', function(socket){
 		
 		//send to the client.js script
 		socket.emit("LOGIN_SUCCESS",currentUser.id,currentUser.name,currentUser.posX,currentUser.posY,currentUser.posZ);
+		// Send mint/vault info to the player on join
+		socket.emit("MINT_VAULT", { mint: mintPublicKeyString, vault: vaultPublicKeyString, rpc: RPC_ENDPOINT });
+		console.log("[SOL] Sent mint/vault to", currentUser.name, mintPublicKeyString, vaultPublicKeyString);
 		
          //spawn all connected clients for currentUser client 
          clients.forEach( function(i) {
@@ -228,6 +461,37 @@ io.on('connection', function(socket){
 		
   
 	});//END_SOCKET_ON
+	
+	// Inventory fetch via socket
+	socket.on('INVENTORY_FETCH', async function (_data) {
+		try {
+			const data = typeof _data === "string" ? JSON.parse(_data) : _data || {};
+			const wallet = (data.wallet || "").trim();
+			if (!wallet) return socket.emit("INVENTORY_ERROR", { error: "wallet required" });
+			const result = await getInventory(wallet);
+			socket.emit("INVENTORY_DATA", { wallet, created: result.created, inventory: result.inventory });
+			console.log("[INV] Sent inventory for", wallet, "created?", result.created);
+		} catch (err) {
+			console.error("[INV] socket fetch error", err.message);
+			socket.emit("INVENTORY_ERROR", { error: err.message });
+		}
+	});
+	
+	// Inventory save via socket
+	socket.on('INVENTORY_SAVE', async function (_data) {
+		try {
+			const data = typeof _data === "string" ? JSON.parse(_data) : _data || {};
+			const wallet = (data.wallet || "").trim();
+			const inventory = data.inventory;
+			if (!wallet || !inventory) return socket.emit("INVENTORY_ERROR", { error: "wallet and inventory required" });
+			await saveInventory(wallet, inventory);
+			socket.emit("INVENTORY_SAVE_OK", { ok: true, wallet });
+			console.log("[INV] Inventory saved via socket for", wallet);
+		} catch (err) {
+			console.error("[INV] socket save error", err.message);
+			socket.emit("INVENTORY_ERROR", { error: err.message });
+		}
+	});
 	
 	
 	

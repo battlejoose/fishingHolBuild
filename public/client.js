@@ -45,6 +45,20 @@ window.addEventListener('load', function() {
 		}
 	  
 	});//END_SOCKET.ON
+
+	// Receive mint/vault config and forward to Unity
+	socket.on('MINT_VAULT', function(data) {
+		try {
+			var payloadObj = data || {};
+			// Do not log RPC endpoints; only forward mint/vault
+			var payload = JSON.stringify({ mint: payloadObj.mint, vault: payloadObj.vault });
+			if (window.unityInstance != null) {
+				window.unityInstance.SendMessage('NetworkManager', 'OnMintVault', payload);
+			}
+		} catch (e) {
+			console.error("Failed to handle MINT_VAULT", e);
+		}
+	});
 	
 		
 	socket.on('SPAWN_PLAYER', function(id,name,posX,posY,posZ) {
@@ -104,6 +118,55 @@ window.addEventListener('load', function() {
 		 
 	
 	});//END_SOCKET.ON
+
+	// Inventory responses to Unity
+	socket.on('INVENTORY_DATA', function(payload) {
+		try {
+			if (window.unityInstance != null) {
+				window.unityInstance.SendMessage('NetworkManager', 'OnInventoryData', JSON.stringify(payload));
+			}
+		} catch (e) {
+			console.error("Failed to forward INVENTORY_DATA", e);
+		}
+	});
+
+	// Expose simple JS helpers callable from Unity to request/save inventory
+	window.RequestInventory = function(wallet) {
+		if (!wallet) { console.error("RequestInventory requires wallet"); return; }
+		socket.emit('INVENTORY_FETCH', { wallet: wallet });
+	};
+
+	window.SaveInventory = function(wallet, inventoryJson) {
+		if (!wallet) { console.error("SaveInventory requires wallet"); return; }
+		let parsed = null;
+		try {
+			parsed = typeof inventoryJson === "string" ? JSON.parse(inventoryJson) : inventoryJson;
+		} catch (e) {
+			console.error("SaveInventory invalid inventory JSON", e);
+			return;
+		}
+		socket.emit('INVENTORY_SAVE', { wallet: wallet, inventory: parsed });
+	};
+
+	socket.on('INVENTORY_SAVE_OK', function(payload) {
+		try {
+			if (window.unityInstance != null) {
+				window.unityInstance.SendMessage('NetworkManager', 'OnInventorySaveOk', JSON.stringify(payload));
+			}
+		} catch (e) {
+			console.error("Failed to forward INVENTORY_SAVE_OK", e);
+		}
+	});
+
+	socket.on('INVENTORY_ERROR', function(payload) {
+		try {
+			if (window.unityInstance != null) {
+				window.unityInstance.SendMessage('NetworkManager', 'OnInventoryError', JSON.stringify(payload));
+			}
+		} catch (e) {
+			console.error("Failed to forward INVENTORY_ERROR", e);
+		}
+	});
 	
 
 });//END_window_addEventListener
