@@ -1275,10 +1275,10 @@ function dbg(text) {
 // === Body ===
 
 var ASM_CONSTS = {
-  9295168: () => { Module['emscripten_get_now_backup'] = performance.now; },  
- 9295223: ($0) => { performance.now = function() { return $0; }; },  
- 9295271: ($0) => { performance.now = function() { return $0; }; },  
- 9295319: () => { performance.now = Module['emscripten_get_now_backup']; }
+  9294464: () => { Module['emscripten_get_now_backup'] = performance.now; },  
+ 9294519: ($0) => { performance.now = function() { return $0; }; },  
+ 9294567: ($0) => { performance.now = function() { return $0; }; },  
+ 9294615: () => { performance.now = Module['emscripten_get_now_backup']; }
 };
 
 
@@ -20617,6 +20617,10 @@ var dynCall_iiif = Module["dynCall_iiif"] = createExportWrapper("dynCall_iiif");
 /** @type {function(...*):?} */
 var dynCall_fif = Module["dynCall_fif"] = createExportWrapper("dynCall_fif");
 /** @type {function(...*):?} */
+var dynCall_vidd = Module["dynCall_vidd"] = createExportWrapper("dynCall_vidd");
+/** @type {function(...*):?} */
+var dynCall_viid = Module["dynCall_viid"] = createExportWrapper("dynCall_viid");
+/** @type {function(...*):?} */
 var dynCall_iiiiiifffiiifiii = Module["dynCall_iiiiiifffiiifiii"] = createExportWrapper("dynCall_iiiiiifffiiifiii");
 /** @type {function(...*):?} */
 var dynCall_viiiffffffi = Module["dynCall_viiiffffffi"] = createExportWrapper("dynCall_viiiffffffi");
@@ -20624,10 +20628,6 @@ var dynCall_viiiffffffi = Module["dynCall_viiiffffffi"] = createExportWrapper("d
 var dynCall_iijjiii = Module["dynCall_iijjiii"] = createExportWrapper("dynCall_iijjiii");
 /** @type {function(...*):?} */
 var dynCall_vijjjii = Module["dynCall_vijjjii"] = createExportWrapper("dynCall_vijjjii");
-/** @type {function(...*):?} */
-var dynCall_vidd = Module["dynCall_vidd"] = createExportWrapper("dynCall_vidd");
-/** @type {function(...*):?} */
-var dynCall_viid = Module["dynCall_viid"] = createExportWrapper("dynCall_viid");
 /** @type {function(...*):?} */
 var dynCall_iiiiiifff = Module["dynCall_iiiiiifff"] = createExportWrapper("dynCall_iiiiiifff");
 /** @type {function(...*):?} */
