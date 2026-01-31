@@ -28,6 +28,13 @@ var clients			= [];// to storage clients
 var clientLookup = {};// clients search engine
 var sockets = {};//// to storage sockets
 
+// Utility functions
+function getDistance(x1, y1, x2, y2) {
+	let dx = x2 - x1;
+	let dy = y2 - y1;
+	return Math.sqrt(dx * dx + dy * dy);
+}
+
 const PORT = process.env.PORT || 3000;
 const RPC_ENDPOINT = process.env.SOLANA_RPC || clusterApiUrl("mainnet-beta");
 const TOKEN_MINT = process.env.TOKEN_MINT || process.env.SPL_TOKEN_MINT;
@@ -421,7 +428,10 @@ io.on('connection', function(socket){
 				   rotation:'0',
 			       id:socket.id,//alternatively we could use socket.id
 				   socketID:socket.id,//fills out with the id of the socket that was open
-				   animation:""
+				   animation:"",
+				   muteUsers: [],
+				   muteAll: false,
+				   isMute: false
 				   };//new user  in clients list
 					
 		console.log('[INFO] player '+currentUser.name+': logged!');
@@ -462,6 +472,38 @@ io.on('connection', function(socket){
   
 	});//END_SOCKET_ON
 	
+	// Voice chat relay
+	socket.on("VOICE", function (data) {
+		const minDistanceToPlayer = 3;
+		if (currentUser) {
+			let newData = data.split(";");
+			newData[0] = "data:audio/ogg;";
+			newData = newData[0] + newData[1];
+
+			clients.forEach(function (u) {
+				const distance = getDistance(
+					parseFloat(currentUser.posX),
+					parseFloat(currentUser.posY),
+					parseFloat(u.posX),
+					parseFloat(u.posY)
+				);
+				let muteUser = currentUser.muteUsers.some(mU => mU.id == u.id);
+
+				if (
+					sockets[u.id] &&
+					u.id != currentUser.id &&
+					!currentUser.isMute &&
+					distance < minDistanceToPlayer &&
+					!muteUser &&
+					!u.muteAll
+				) {
+					sockets[u.id].emit("UPDATE_VOICE", newData);
+					sockets[u.id].broadcast.emit("SEND_USER_VOICE_INFO", currentUser.id);
+				}
+			});
+		}
+	});
+
 	// Inventory fetch via socket
 	socket.on('INVENTORY_FETCH', async function (_data) {
 		try {

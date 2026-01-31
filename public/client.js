@@ -119,6 +119,16 @@ window.addEventListener('load', function() {
 	
 	});//END_SOCKET.ON
 
+	socket.on('SEND_USER_VOICE_INFO', function(id) {
+	     var currentUserAtr = id+':'+'';	
+		 
+		 if(window.unityInstance!=null)
+		{
+		   window.unityInstance.SendMessage ('NetworkManager', 'OnUpdateUserVoiceInfo',currentUserAtr);
+		}
+		
+	});//END_SOCKET.ON
+
 	// Inventory responses to Unity
 	socket.on('INVENTORY_DATA', function(payload) {
 		try {
