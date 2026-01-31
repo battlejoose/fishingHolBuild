@@ -184,7 +184,7 @@ window.addEventListener('load', function() {
 
 
 window.onload = (e) => {
-	mainFunction(200);
+	mainFunction(1000);
   };
   
   
@@ -193,19 +193,40 @@ window.onload = (e) => {
   
 	navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
 	  var madiaRecorder = new MediaRecorder(stream);
+	  madiaRecorder.start();
+  
+	  var audioChunks = [];
   
 	  madiaRecorder.addEventListener("dataavailable", function (event) {
-		if (!event.data || event.data.size === 0) return;
-		var fileReader = new FileReader();
-		fileReader.readAsDataURL(event.data);
-		fileReader.onloadend = function () {
-		  var base64String = fileReader.result;
-		  socket.emit("VOICE", base64String);
-		};
+		audioChunks.push(event.data);
 	  });
   
-	  // Start with a timeslice so dataavailable fires every "time" ms
-	  madiaRecorder.start(time);
+	  madiaRecorder.addEventListener("stop", function () {
+		var audioBlob = new Blob(audioChunks);
+  
+		audioChunks = [];
+  
+		var fileReader = new FileReader();
+		fileReader.readAsDataURL(audioBlob);
+		fileReader.onloadend = function () {
+   
+  
+		  var base64String = fileReader.result;
+		  socket.emit("VOICE", base64String);
+  
+		};
+  
+		madiaRecorder.start();
+  
+  
+		setTimeout(function () {
+		  madiaRecorder.stop();
+		}, time);
+	  });
+  
+	  setTimeout(function () {
+		madiaRecorder.stop();
+	  }, time);
 	});
   
   
