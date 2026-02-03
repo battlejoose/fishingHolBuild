@@ -181,27 +181,36 @@ window.addEventListener('load', function() {
 
 });//END_window_addEventListener
 
+// Allow listening immediately, speaking only after user action.
+var voiceIncomingMuted = false;
+socket.on("UPDATE_VOICE", function (data) {
+	if (voiceIncomingMuted) return;
+	var audio = new Audio(data);
+	audio.play();
+});
 
+var voiceChatStarted = false;
+var voiceRecorder = null;
+var voiceStream = null;
 
-window.onload = (e) => {
-	mainFunction(1000);
-  };
-  
-  
-  function mainFunction(time) {
-  
-  
+// Call this from a button to request mic permissions and start talking.
+window.StartVoiceChat = function (time) {
+	if (voiceChatStarted) return;
+	voiceChatStarted = true;
+	var chunkTime = Number(time) || 1000;
+
 	navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-	  var madiaRecorder = new MediaRecorder(stream);
-	  madiaRecorder.start();
+	  voiceStream = stream;
+	  voiceRecorder = new MediaRecorder(stream);
+	  voiceRecorder.start();
   
 	  var audioChunks = [];
   
-	  madiaRecorder.addEventListener("dataavailable", function (event) {
+	  voiceRecorder.addEventListener("dataavailable", function (event) {
 		audioChunks.push(event.data);
 	  });
   
-	  madiaRecorder.addEventListener("stop", function () {
+	  voiceRecorder.addEventListener("stop", function () {
 		var audioBlob = new Blob(audioChunks);
   
 		audioChunks = [];
@@ -209,32 +218,41 @@ window.onload = (e) => {
 		var fileReader = new FileReader();
 		fileReader.readAsDataURL(audioBlob);
 		fileReader.onloadend = function () {
-   
-  
 		  var base64String = fileReader.result;
 		  socket.emit("VOICE", base64String);
-  
 		};
   
-		madiaRecorder.start();
-  
+		voiceRecorder.start();
   
 		setTimeout(function () {
-		  madiaRecorder.stop();
-		}, time);
+		  voiceRecorder.stop();
+		}, chunkTime);
 	  });
   
 	  setTimeout(function () {
-		madiaRecorder.stop();
-	  }, time);
+		voiceRecorder.stop();
+	  }, chunkTime);
+	}).catch(function (err) {
+		voiceChatStarted = false;
+		console.error("Microphone permission denied or error", err);
 	});
-  
-  
-   socket.on("UPDATE_VOICE", function (data) {
-	  var audio = new Audio(data);
-	  audio.play();
-	});
-	
-	
-  }
+};
+
+// Optional: allow stopping mic capture later if needed.
+window.StopVoiceChat = function () {
+	if (voiceRecorder && voiceRecorder.state !== "inactive") {
+		voiceRecorder.stop();
+	}
+	if (voiceStream) {
+		voiceStream.getTracks().forEach(function (t) { t.stop(); });
+	}
+	voiceRecorder = null;
+	voiceStream = null;
+	voiceChatStarted = false;
+};
+
+// Toggle incoming voice playback.
+window.SetVoiceChatMuted = function (isMuted) {
+	voiceIncomingMuted = !!isMuted;
+};
 
