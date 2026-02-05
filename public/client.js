@@ -1,6 +1,21 @@
 var socket = io() || {};
 socket.isReady = false;
 
+// Allow Unity to request a reconnect (button-driven).
+window.ReconnectSocket = function () {
+	if (!socket) return;
+	if (socket.connected) return;
+	try {
+		if (socket.connect) {
+			socket.connect();
+		} else if (socket.io && socket.io.open) {
+			socket.io.open();
+		}
+	} catch (e) {
+		console.error("ReconnectSocket failed", e);
+	}
+};
+
 
 window.addEventListener('load', function() {
 
@@ -31,6 +46,19 @@ window.addEventListener('load', function() {
 		}
 	  
 	});//END_SOCKET.ON
+
+	// Socket lifecycle events
+	socket.on('connect', function() {
+		if (window.unityInstance != null) {
+			window.unityInstance.SendMessage('NetworkManager', 'OnSocketConnected', socket.id || '');
+		}
+	});
+
+	socket.on('disconnect', function(reason) {
+		if (window.unityInstance != null) {
+			window.unityInstance.SendMessage('NetworkManager', 'OnSocketDisconnected', reason || '');
+		}
+	});
 
 					      
 	socket.on('LOGIN_SUCCESS', function(id,name,posX,posY,posZ) {
