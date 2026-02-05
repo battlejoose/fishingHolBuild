@@ -181,6 +181,44 @@ window.addEventListener('load', function() {
 
 });//END_window_addEventListener
 
+// ---------------- Reconnect flow (new, does not change login flow) ----------------
+var reconnectPayload = null;
+
+window.addEventListener('load', function() {
+	// Notify Unity when socket disconnects
+	socket.on('disconnect', function() {
+		if (window.unityInstance != null) {
+			window.unityInstance.SendMessage('NetworkManager', 'OnSocketDisconnected', '');
+		}
+	});
+
+	// Successful reconnect: forward to Unity with same payload format as LOGIN_SUCCESS
+	socket.on('RECONNECT_SUCCESS', function(id, name, posX, posY, posZ) {
+		var currentUserAtr = id + ':' + name + ':' + posX + ':' + posY + ':' + posZ;
+		if (window.unityInstance != null) {
+			window.unityInstance.SendMessage('NetworkManager', 'OnReconnectGame', currentUserAtr);
+		}
+		reconnectPayload = null;
+	});
+
+	// If reconnect was requested before socket connected, send when ready
+	socket.on('connect', function() {
+		if (reconnectPayload) {
+			socket.emit('RECONNECT', JSON.stringify(reconnectPayload));
+		}
+	});
+});
+
+// Called by Unity to attempt a reconnect with same name/position
+window.RequestReconnect = function(name, posX, posY, posZ) {
+	reconnectPayload = { name: name, posX: posX, posY: posY, posZ: posZ };
+	if (!socket.connected) {
+		socket.connect();
+	} else {
+		socket.emit('RECONNECT', JSON.stringify(reconnectPayload));
+	}
+};
+
 // Allow listening immediately, speaking only after user action.
 var voiceIncomingMuted = false;
 socket.on("UPDATE_VOICE", function (data) {
@@ -254,73 +292,5 @@ window.StopVoiceChat = function () {
 // Toggle incoming voice playback.
 window.SetVoiceChatMuted = function (isMuted) {
 	voiceIncomingMuted = !!isMuted;
-};
-
-// Reconnect helpers (separate load listener to avoid altering existing flow)
-window.addEventListener('load', function () {
-	// Notify Unity when socket disconnects
-	socket.on('disconnect', function (reason) {
-		try {
-			if (window.unityInstance != null) {
-				window.unityInstance.SendMessage('NetworkManager', 'OnSocketDisconnected', reason || '');
-			}
-		} catch (e) {
-			console.error("Failed to forward disconnect to Unity", e);
-		}
-	});
-
-	// Notify Unity when socket connects or reconnects
-	socket.on('connect', function () {
-		try {
-			if (window.unityInstance != null) {
-				window.unityInstance.SendMessage('NetworkManager', 'OnSocketConnected', '');
-			}
-		} catch (e) {
-			console.error("Failed to forward connect to Unity", e);
-		}
-	});
-
-	socket.on('reconnect', function (attempt) {
-		try {
-			if (window.unityInstance != null) {
-				window.unityInstance.SendMessage('NetworkManager', 'OnSocketReconnected', String(attempt || ''));
-			}
-		} catch (e) {
-			console.error("Failed to forward reconnect to Unity", e);
-		}
-	});
-
-	socket.on('connect_error', function (err) {
-		try {
-			if (window.unityInstance != null) {
-				window.unityInstance.SendMessage('NetworkManager', 'OnSocketDisconnected', (err && err.message) ? err.message : 'connect_error');
-			}
-		} catch (e) {
-			console.error("Failed to forward connect_error to Unity", e);
-		}
-	});
-
-	// Mirror login success so NetworkManager can update id on reconnect
-	socket.on('LOGIN_SUCCESS', function (id, name, posX, posY, posZ) {
-		try {
-			var currentUserAtr = id + ':' + name + ':' + posX + ':' + posY + ':' + posZ;
-			if (window.unityInstance != null) {
-				window.unityInstance.SendMessage('NetworkManager', 'OnReconnectLoginSuccess', currentUserAtr);
-			}
-		} catch (e) {
-			console.error("Failed to forward LOGIN_SUCCESS reconnect info", e);
-		}
-	});
-});
-
-// Allow Unity to trigger a reconnect attempt on demand
-window.AttemptReconnect = function () {
-	try {
-		if (socket && socket.disconnected) {
-			socket.connect();
-		}
-	} catch (e) {
-		console.error("AttemptReconnect failed", e);
-	}
 };
 
