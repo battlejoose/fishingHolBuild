@@ -1,6 +1,5 @@
 var socket = io() || {};
 socket.isReady = false;
-var pendingReconnect = null;
 
 
 window.addEventListener('load', function() {
@@ -32,24 +31,6 @@ window.addEventListener('load', function() {
 		}
 	  
 	});//END_SOCKET.ON
-
-	socket.on('connect', function() {
-		if (pendingReconnect) {
-			try {
-				socket.emit('LOGIN', JSON.stringify(pendingReconnect));
-			} catch (e) {
-				console.error("Failed to emit LOGIN on reconnect", e);
-			}
-			pendingReconnect = null;
-		}
-	});
-
-	socket.on('disconnect', function(reason) {
-		if(window.unityInstance!=null)
-		{
-			window.unityInstance.SendMessage('NetworkManager', 'OnSocketDisconnected', reason || '');
-		}
-	});
 
 					      
 	socket.on('LOGIN_SUCCESS', function(id,name,posX,posY,posZ) {
@@ -196,26 +177,6 @@ window.addEventListener('load', function() {
 			console.error("Failed to forward INVENTORY_ERROR", e);
 		}
 	});
-
-	// Called from Unity to attempt a reconnect using last known name/position
-	window.TryReconnect = function(name, posX, posY, posZ) {
-		pendingReconnect = {
-			name: name || "",
-			posX: String(posX || 0),
-			posY: String(posY || 0),
-			posZ: String(posZ || 0)
-		};
-		try {
-			if (socket.connected) {
-				socket.emit('LOGIN', JSON.stringify(pendingReconnect));
-				pendingReconnect = null;
-			} else {
-				socket.connect();
-			}
-		} catch (e) {
-			console.error("TryReconnect failed", e);
-		}
-	};
 	
 
 });//END_window_addEventListener
@@ -293,5 +254,73 @@ window.StopVoiceChat = function () {
 // Toggle incoming voice playback.
 window.SetVoiceChatMuted = function (isMuted) {
 	voiceIncomingMuted = !!isMuted;
+};
+
+// Reconnect helpers (separate load listener to avoid altering existing flow)
+window.addEventListener('load', function () {
+	// Notify Unity when socket disconnects
+	socket.on('disconnect', function (reason) {
+		try {
+			if (window.unityInstance != null) {
+				window.unityInstance.SendMessage('NetworkManager', 'OnSocketDisconnected', reason || '');
+			}
+		} catch (e) {
+			console.error("Failed to forward disconnect to Unity", e);
+		}
+	});
+
+	// Notify Unity when socket connects or reconnects
+	socket.on('connect', function () {
+		try {
+			if (window.unityInstance != null) {
+				window.unityInstance.SendMessage('NetworkManager', 'OnSocketConnected', '');
+			}
+		} catch (e) {
+			console.error("Failed to forward connect to Unity", e);
+		}
+	});
+
+	socket.on('reconnect', function (attempt) {
+		try {
+			if (window.unityInstance != null) {
+				window.unityInstance.SendMessage('NetworkManager', 'OnSocketReconnected', String(attempt || ''));
+			}
+		} catch (e) {
+			console.error("Failed to forward reconnect to Unity", e);
+		}
+	});
+
+	socket.on('connect_error', function (err) {
+		try {
+			if (window.unityInstance != null) {
+				window.unityInstance.SendMessage('NetworkManager', 'OnSocketDisconnected', (err && err.message) ? err.message : 'connect_error');
+			}
+		} catch (e) {
+			console.error("Failed to forward connect_error to Unity", e);
+		}
+	});
+
+	// Mirror login success so NetworkManager can update id on reconnect
+	socket.on('LOGIN_SUCCESS', function (id, name, posX, posY, posZ) {
+		try {
+			var currentUserAtr = id + ':' + name + ':' + posX + ':' + posY + ':' + posZ;
+			if (window.unityInstance != null) {
+				window.unityInstance.SendMessage('NetworkManager', 'OnReconnectLoginSuccess', currentUserAtr);
+			}
+		} catch (e) {
+			console.error("Failed to forward LOGIN_SUCCESS reconnect info", e);
+		}
+	});
+});
+
+// Allow Unity to trigger a reconnect attempt on demand
+window.AttemptReconnect = function () {
+	try {
+		if (socket && socket.disconnected) {
+			socket.connect();
+		}
+	} catch (e) {
+		console.error("AttemptReconnect failed", e);
+	}
 };
 
