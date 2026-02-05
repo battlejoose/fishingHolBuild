@@ -46,6 +46,30 @@ window.addEventListener('load', function() {
 	  
 	});//END_SOCKET.ON
 
+// Cache login payload for reconnects without altering login flow
+socket.on('LOGIN_SUCCESS', function(id,name,posX,posY,posZ) {
+	var currentUserAtr = id+':'+name+':'+posX+':'+posY+':'+posZ;
+	if(window.unityInstance!=null)
+	{
+		window.unityInstance.SendMessage ('NetworkManager', 'OnCacheLoginPayload', currentUserAtr);
+	}
+});//END_SOCKET.ON
+
+// Notify Unity about socket connection state
+socket.on('connect', function() {
+	if(window.unityInstance!=null)
+	{
+		window.unityInstance.SendMessage('NetworkManager', 'OnSocketReconnected', '');
+	}
+});//END_SOCKET.ON
+
+socket.on('disconnect', function(reason) {
+	if(window.unityInstance!=null)
+	{
+		window.unityInstance.SendMessage('NetworkManager', 'OnSocketDisconnected', reason || 'disconnect');
+	}
+});//END_SOCKET.ON
+
 	// Receive mint/vault config and forward to Unity
 	socket.on('MINT_VAULT', function(data) {
 		try {
@@ -157,6 +181,34 @@ window.addEventListener('load', function() {
 		}
 		socket.emit('INVENTORY_SAVE', { wallet: wallet, inventory: parsed });
 	};
+
+// Reconnect helper callable from Unity
+window.ReconnectAndLogin = function(name, posX, posY, posZ) {
+	if (!name) { console.error("ReconnectAndLogin requires name"); return; }
+	var payload = {
+		name: name,
+		posX: String(posX ?? 0),
+		posY: String(posY ?? 0),
+		posZ: String(posZ ?? 0)
+	};
+	var emitLogin = function () {
+		try {
+			socket.emit('LOGIN', JSON.stringify(payload));
+		} catch (e) {
+			console.error("ReconnectAndLogin emit failed", e);
+		}
+	};
+	if (socket.connected) {
+		emitLogin();
+		return;
+	}
+	socket.once('connect', emitLogin);
+	try {
+		socket.connect();
+	} catch (e) {
+		console.error("ReconnectAndLogin connect failed", e);
+	}
+};
 
 	socket.on('INVENTORY_SAVE_OK', function(payload) {
 		try {
