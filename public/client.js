@@ -143,6 +143,7 @@ socket.on('disconnect', function(reason) {
 	
 	});//END_SOCKET.ON
 
+	/* Voice chat (disabled for now)
 	socket.on('SEND_USER_VOICE_INFO', function(id) {
 	     var currentUserAtr = id+':'+'';	
 		 
@@ -152,6 +153,7 @@ socket.on('disconnect', function(reason) {
 		}
 		
 	});//END_SOCKET.ON
+	*/
 
 	// Inventory responses to Unity
 	socket.on('INVENTORY_DATA', function(payload) {
@@ -233,6 +235,7 @@ window.ReconnectAndLogin = function(name, posX, posY, posZ) {
 
 });//END_window_addEventListener
 
+/* Voice chat (disabled for now)
 // Allow listening immediately, speaking only after user action.
 var voiceIncomingMuted = false;
 socket.on("UPDATE_VOICE", function (data) {
@@ -307,4 +310,5 @@ window.StopVoiceChat = function () {
 window.SetVoiceChatMuted = function (isMuted) {
 	voiceIncomingMuted = !!isMuted;
 };
+*/
 
