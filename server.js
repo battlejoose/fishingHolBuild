@@ -226,7 +226,7 @@ const defaultInventory = () => ({
 	floaterUsed: true,
 	spinnerCount: 0,
 	spinnerUsed: false,
-	wormCount: 1,
+	wormCount: 5,
 	wormUsed: true,
 	cheeseCount: 0,
 	cheeseUsed: false,
