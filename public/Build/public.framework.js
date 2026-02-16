@@ -1275,10 +1275,10 @@ function dbg(text) {
 // === Body ===
 
 var ASM_CONSTS = {
-  9298736: () => { Module['emscripten_get_now_backup'] = performance.now; },  
- 9298791: ($0) => { performance.now = function() { return $0; }; },  
- 9298839: ($0) => { performance.now = function() { return $0; }; },  
- 9298887: () => { performance.now = Module['emscripten_get_now_backup']; }
+  9298720: () => { Module['emscripten_get_now_backup'] = performance.now; },  
+ 9298775: ($0) => { performance.now = function() { return $0; }; },  
+ 9298823: ($0) => { performance.now = function() { return $0; }; },  
+ 9298871: () => { performance.now = Module['emscripten_get_now_backup']; }
 };
 
 
@@ -1868,10 +1868,6 @@ var ASM_CONSTS = {
         ((a1) => dynCall_vi.apply(null, [callback, a1]))(isXnft);
       }
     }
-
-  function _IsMobileBrowser() {
-       return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-     }
 
   var JS_Accelerometer = null;
   
@@ -18875,7 +18871,6 @@ var wasmImports = {
   "GetJSLoadTimeInfo": _GetJSLoadTimeInfo,
   "GetJSMemoryInfo": _GetJSMemoryInfo,
   "InitWalletAdapter": _InitWalletAdapter,
-  "IsMobileBrowser": _IsMobileBrowser,
   "JS_Accelerometer_IsRunning": _JS_Accelerometer_IsRunning,
   "JS_Accelerometer_Start": _JS_Accelerometer_Start,
   "JS_Accelerometer_Stop": _JS_Accelerometer_Stop,
