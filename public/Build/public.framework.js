@@ -1275,10 +1275,10 @@ function dbg(text) {
 // === Body ===
 
 var ASM_CONSTS = {
-  9298656: () => { Module['emscripten_get_now_backup'] = performance.now; },  
- 9298711: ($0) => { performance.now = function() { return $0; }; },  
+  9298704: () => { Module['emscripten_get_now_backup'] = performance.now; },  
  9298759: ($0) => { performance.now = function() { return $0; }; },  
- 9298807: () => { performance.now = Module['emscripten_get_now_backup']; }
+ 9298807: ($0) => { performance.now = function() { return $0; }; },  
+ 9298855: () => { performance.now = Module['emscripten_get_now_backup']; }
 };
 
 
@@ -8839,6 +8839,11 @@ var ASM_CONSTS = {
       url = UTF8ToString(url);
       window.location.href = url;
     }
+
+  function _OpenURLInNewTab(urlPtr) {
+          var url = UTF8ToString(urlPtr);
+          window.open(url, "_blank");
+      }
 
   function _OpenWindow(link) {
       var url = UTF8ToString(link);
@@ -18998,6 +19003,7 @@ var wasmImports = {
   "MetamaskSignIn": _MetamaskSignIn,
   "MetamaskTransferTo": _MetamaskTransferTo,
   "OpenURL": _OpenURL,
+  "OpenURLInNewTab": _OpenURLInNewTab,
   "OpenWindow": _OpenWindow,
   "RemoveAuthCodeFromURL": _RemoveAuthCodeFromURL,
   "WalletAddress": _WalletAddress,
