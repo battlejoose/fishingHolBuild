@@ -1275,10 +1275,10 @@ function dbg(text) {
 // === Body ===
 
 var ASM_CONSTS = {
-  9299120: () => { Module['emscripten_get_now_backup'] = performance.now; },  
- 9299175: ($0) => { performance.now = function() { return $0; }; },  
- 9299223: ($0) => { performance.now = function() { return $0; }; },  
- 9299271: () => { performance.now = Module['emscripten_get_now_backup']; }
+  9296512: () => { Module['emscripten_get_now_backup'] = performance.now; },  
+ 9296567: ($0) => { performance.now = function() { return $0; }; },  
+ 9296615: ($0) => { performance.now = function() { return $0; }; },  
+ 9296663: () => { performance.now = Module['emscripten_get_now_backup']; }
 };
 
 
@@ -9373,24 +9373,6 @@ var ASM_CONSTS = {
   			return -6;
   
   		instance.ws.send(HEAPU8.buffer.slice(bufferPtr, bufferPtr + length));
-  
-  		return 0;
-  
-  	}
-
-  
-  function _WebSocketSendText(instanceId, message) {
-  
-  		var instance = webSocketState.instances[instanceId];
-  		if (!instance) return -1;
-  
-  		if (!instance.ws)
-  			return -3;
-  
-  		if (instance.ws.readyState !== 1)
-  			return -6;
-  
-  		instance.ws.send(UTF8ToString(message));
   
   		return 0;
   
@@ -19039,7 +19021,6 @@ var wasmImports = {
   "WebSocketFree": _WebSocketFree,
   "WebSocketGetState": _WebSocketGetState,
   "WebSocketSend": _WebSocketSend,
-  "WebSocketSendText": _WebSocketSendText,
   "WebSocketSetOnClose": _WebSocketSetOnClose,
   "WebSocketSetOnError": _WebSocketSetOnError,
   "WebSocketSetOnMessage": _WebSocketSetOnMessage,
