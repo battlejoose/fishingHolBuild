@@ -17,6 +17,7 @@ const {
 	TOKEN_PROGRAM_ID,
 	ASSOCIATED_TOKEN_PROGRAM_ID
 } = require('@solana/spl-token');
+const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const { Pool } = require('pg');
 
 app.use(express.json());
@@ -98,14 +99,22 @@ async function buildAndSendPayout(destination, rawAmount) {
 	const mint = ensureTokenMint();
 	const destinationPk = new PublicKey(destination);
 	const vaultPk = vaultKeypair.publicKey;
-	const vaultAta = await getAssociatedTokenAddress(mint, vaultPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
-	const destAta = await getAssociatedTokenAddress(mint, destinationPk, false, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID);
+
+	// Detect which token program owns the mint
+	const mintInfo = await connection.getAccountInfo(mint);
+	const mintOwner = mintInfo?.owner?.toBase58();
+	const isToken2022 = mintOwner === TOKEN_2022_PROGRAM_ID.toBase58();
+	const tokenProgramId = isToken2022 ? TOKEN_2022_PROGRAM_ID : TOKEN_PROGRAM_ID;
+	console.log("[SOL] mintOwner", mintOwner, "isToken2022", isToken2022);
+
+	const vaultAta = await getAssociatedTokenAddress(mint, vaultPk, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
+	const destAta = await getAssociatedTokenAddress(mint, destinationPk, false, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID);
 
 	const rawAmountBig = BigInt(rawAmount);
 
 	const instructions = [];
 
-	// Log balances to help troubleshoot "no record of prior credit"
+	// Log balances
 	let vaultBalLamports = null;
 	let vaultBalUi = null;
 	try {
@@ -120,14 +129,14 @@ async function buildAndSendPayout(destination, rawAmount) {
 	const vaultAtaInfo = await connection.getAccountInfo(vaultAta);
 	if (!vaultAtaInfo) {
 		instructions.push(
-			createAssociatedTokenAccountInstruction(vaultPk, vaultAta, vaultPk, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+			createAssociatedTokenAccountInstruction(vaultPk, vaultAta, vaultPk, mint, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID)
 		);
 	}
 
 	const destAtaInfo = await connection.getAccountInfo(destAta);
 	if (!destAtaInfo) {
 		instructions.push(
-			createAssociatedTokenAccountInstruction(vaultPk, destAta, destinationPk, mint, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID)
+			createAssociatedTokenAccountInstruction(vaultPk, destAta, destinationPk, mint, tokenProgramId, ASSOCIATED_TOKEN_PROGRAM_ID)
 		);
 	}
 
@@ -143,7 +152,7 @@ async function buildAndSendPayout(destination, rawAmount) {
 			vaultPk,
 			rawAmountBig,
 			[],
-			TOKEN_PROGRAM_ID
+			tokenProgramId
 		)
 	);
 
