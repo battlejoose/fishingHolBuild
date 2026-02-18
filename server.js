@@ -481,7 +481,7 @@ io.on('connection', function(socket){
   
 	});//END_SOCKET_ON
 	
-	/* Voice chat relay (disabled for now)
+	// Voice chat relay
 	socket.on("VOICE", function (data) {
 		const minDistanceToPlayer = 3;
 		if (currentUser) {
@@ -512,7 +512,6 @@ io.on('connection', function(socket){
 			});
 		}
 	});
-	*/
 
 	// Inventory fetch via socket
 	socket.on('INVENTORY_FETCH', async function (_data) {
