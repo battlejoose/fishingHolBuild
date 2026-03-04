@@ -238,6 +238,12 @@ window.ReconnectAndLogin = function(name, posX, posY, posZ) {
 var voiceIncomingMuted = false;
 socket.on("UPDATE_VOICE", function (data) {
 	if (voiceIncomingMuted) return;
+	// Server rewrites the MIME to audio/ogg but actual bytes are always WAV.
+	// Re-create the data URL with the correct MIME so the browser decodes it properly.
+	var commaIdx = data.indexOf(',');
+	if (commaIdx >= 0) {
+		data = "data:audio/wav;base64," + data.substring(commaIdx + 1);
+	}
 	var audio = new Audio(data);
 	audio.play();
 });
