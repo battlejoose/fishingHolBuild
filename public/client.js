@@ -233,7 +233,8 @@ window.ReconnectAndLogin = function(name, posX, posY, posZ) {
 
 });//END_window_addEventListener
 
-// Allow listening immediately, speaking only after user action.
+// ===================== Voice Chat (WAV-based, cross-platform) =====================
+
 var voiceIncomingMuted = false;
 socket.on("UPDATE_VOICE", function (data) {
 	if (voiceIncomingMuted) return;
@@ -242,68 +243,116 @@ socket.on("UPDATE_VOICE", function (data) {
 });
 
 var voiceChatStarted = false;
-var voiceRecorder = null;
 var voiceStream = null;
+var voiceContext = null;
+var voiceProcessor = null;
+var voiceSource = null;
+var voiceInterval = null;
 
-// Call this from a button to request mic permissions and start talking.
+function _voiceWriteString(view, offset, str) {
+	for (var i = 0; i < str.length; i++) {
+		view.setUint8(offset + i, str.charCodeAt(i));
+	}
+}
+
+function _voiceEncodeWav(samples, sampleRate) {
+	var numCh = 1, bps = 16;
+	var dataSize = samples.length * 2;
+	var buf = new ArrayBuffer(44 + dataSize);
+	var v = new DataView(buf);
+	_voiceWriteString(v, 0, 'RIFF');
+	v.setUint32(4, 36 + dataSize, true);
+	_voiceWriteString(v, 8, 'WAVE');
+	_voiceWriteString(v, 12, 'fmt ');
+	v.setUint32(16, 16, true);
+	v.setUint16(20, 1, true);
+	v.setUint16(22, numCh, true);
+	v.setUint32(24, sampleRate, true);
+	v.setUint32(28, sampleRate * numCh * 2, true);
+	v.setUint16(32, numCh * 2, true);
+	v.setUint16(34, bps, true);
+	_voiceWriteString(v, 36, 'data');
+	v.setUint32(40, dataSize, true);
+	var off = 44;
+	for (var i = 0; i < samples.length; i++) {
+		var s = Math.max(-1, Math.min(1, samples[i]));
+		v.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+		off += 2;
+	}
+	return buf;
+}
+
+function _voiceArrayBufToBase64(buffer) {
+	var bin = '', bytes = new Uint8Array(buffer);
+	for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+	return btoa(bin);
+}
+
+function _voiceDownsample(buffer, fromRate, toRate) {
+	if (fromRate === toRate || fromRate < toRate) return buffer;
+	var ratio = fromRate / toRate;
+	var len = Math.round(buffer.length / ratio);
+	var out = new Float32Array(len);
+	for (var i = 0; i < len; i++) {
+		out[i] = buffer[Math.min(Math.round(i * ratio), buffer.length - 1)];
+	}
+	return out;
+}
+
 window.StartVoiceChat = function (time) {
 	if (voiceChatStarted) return;
 	voiceChatStarted = true;
 	var chunkTime = Number(time) || 1000;
+	var targetRate = 16000;
 
-	navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-	  voiceStream = stream;
-	  voiceRecorder = new MediaRecorder(stream);
-	  voiceRecorder.start();
-  
-	  var audioChunks = [];
-  
-	  voiceRecorder.addEventListener("dataavailable", function (event) {
-		audioChunks.push(event.data);
-	  });
-  
-	  voiceRecorder.addEventListener("stop", function () {
-		var audioBlob = new Blob(audioChunks);
-  
-		audioChunks = [];
-  
-		var fileReader = new FileReader();
-		fileReader.readAsDataURL(audioBlob);
-		fileReader.onloadend = function () {
-		  var base64String = fileReader.result;
-		  socket.emit("VOICE", base64String);
+	navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+		voiceStream = stream;
+		voiceContext = new (window.AudioContext || window.webkitAudioContext)();
+		voiceSource = voiceContext.createMediaStreamSource(stream);
+		voiceProcessor = voiceContext.createScriptProcessor(4096, 1, 1);
+
+		var chunks = [];
+		voiceSource.connect(voiceProcessor);
+		voiceProcessor.connect(voiceContext.destination);
+
+		voiceProcessor.onaudioprocess = function (e) {
+			chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
 		};
-  
-		voiceRecorder.start();
-  
-		setTimeout(function () {
-		  voiceRecorder.stop();
+
+		voiceInterval = setInterval(function () {
+			if (chunks.length === 0) return;
+			var total = 0;
+			for (var i = 0; i < chunks.length; i++) total += chunks[i].length;
+			var merged = new Float32Array(total);
+			var pos = 0;
+			for (var i = 0; i < chunks.length; i++) {
+				merged.set(chunks[i], pos);
+				pos += chunks[i].length;
+			}
+			chunks = [];
+			var down = _voiceDownsample(merged, voiceContext.sampleRate, targetRate);
+			var wav = _voiceEncodeWav(down, targetRate);
+			var b64 = _voiceArrayBufToBase64(wav);
+			socket.emit("VOICE", "data:audio/wav;base64," + b64);
 		}, chunkTime);
-	  });
-  
-	  setTimeout(function () {
-		voiceRecorder.stop();
-	  }, chunkTime);
 	}).catch(function (err) {
 		voiceChatStarted = false;
 		console.error("Microphone permission denied or error", err);
 	});
 };
 
-// Stop mic capture.
 window.StopVoiceChat = function () {
-	if (voiceRecorder && voiceRecorder.state !== "inactive") {
-		voiceRecorder.stop();
-	}
+	if (voiceInterval) { clearInterval(voiceInterval); voiceInterval = null; }
+	if (voiceProcessor) { voiceProcessor.disconnect(); voiceProcessor = null; }
+	if (voiceSource) { voiceSource.disconnect(); voiceSource = null; }
+	if (voiceContext) { voiceContext.close().catch(function(){}); voiceContext = null; }
 	if (voiceStream) {
 		voiceStream.getTracks().forEach(function (t) { t.stop(); });
+		voiceStream = null;
 	}
-	voiceRecorder = null;
-	voiceStream = null;
 	voiceChatStarted = false;
 };
 
-// Mute/unmute incoming voice playback.
 window.SetVoiceChatMuted = function (isMuted) {
 	voiceIncomingMuted = !!isMuted;
 };
