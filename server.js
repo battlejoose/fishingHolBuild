@@ -28,6 +28,7 @@ app.use(express.static(__dirname+'/public'));
 var clients			= [];// to storage clients
 var clientLookup = {};// clients search engine
 var sockets = {};//// to storage sockets
+var connectedWallets = {}; // wallet address -> socket id
 
 // Utility functions
 function getDistance(x1, y1, x2, y2) {
@@ -513,6 +514,32 @@ io.on('connection', function(socket){
 		}
 	});
 
+	socket.on('WALLET_CONNECT', function (_data) {
+		try {
+			var data = typeof _data === "string" ? JSON.parse(_data) : _data || {};
+			var wallet = (data.wallet || "").trim();
+			if (!wallet) {
+				socket.emit("WALLET_REJECTED", { reason: "No wallet address provided" });
+				return;
+			}
+
+			var existingSocketId = connectedWallets[wallet];
+			if (existingSocketId && existingSocketId !== socket.id && sockets[existingSocketId]) {
+				console.log("[WALLET] Rejected duplicate wallet " + wallet + " from " + socket.id + " (already used by " + existingSocketId + ")");
+				socket.emit("WALLET_REJECTED", { reason: "This wallet is already connected by another player" });
+				return;
+			}
+
+			connectedWallets[wallet] = socket.id;
+			if (currentUser) currentUser.wallet = wallet;
+			console.log("[WALLET] Accepted wallet " + wallet + " for " + socket.id);
+			socket.emit("WALLET_ACCEPTED", { wallet: wallet });
+		} catch (err) {
+			console.error("[WALLET] error", err.message);
+			socket.emit("WALLET_REJECTED", { reason: err.message });
+		}
+	});
+
 	// Inventory fetch via socket
 	socket.on('INVENTORY_FETCH', async function (_data) {
 		try {
@@ -597,6 +624,12 @@ io.on('connection', function(socket){
 	    if(currentUser)
 		{
 		 currentUser.isDead = true;
+
+		 // Release wallet lock
+		 if (currentUser.wallet && connectedWallets[currentUser.wallet] === socket.id) {
+			 console.log("[WALLET] Released wallet " + currentUser.wallet + " for " + socket.id);
+			 delete connectedWallets[currentUser.wallet];
+		 }
 		 
 		 //send to the client.js script
 		 //updates the currentUser disconnection for all players in game
@@ -614,6 +647,14 @@ io.on('connection', function(socket){
 			};
 		};
 		
+		}
+
+		// Also clean up any wallet mapped to this socket (safety net)
+		for (var w in connectedWallets) {
+			if (connectedWallets[w] === socket.id) {
+				console.log("[WALLET] Cleanup released wallet " + w + " for " + socket.id);
+				delete connectedWallets[w];
+			}
 		}
 		
     });//END_SOCKET_ON
