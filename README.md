@@ -90,7 +90,7 @@ Equip your rod and bait, then cast into the water. Your float/spinner lands and 
 
 ### 3. Fight the Fish (Dynamic Catch Mechanic)
 
-This is where it gets interesting. When a fish bites, a **reel bar** appears and the fight begins. The fish alternates between two phases on a randomized timer (2–10 seconds per cycle):
+ When a fish bites, a **reel bar** appears and the fight begins. The fish alternates between two phases on a randomized timer (2–10 seconds per cycle):
 
 ```
             ┌─────────────────────────────────────┐
@@ -111,6 +111,7 @@ This is where it gets interesting. When a fish bites, a **reel bar** appears and
     Reel bar fills when you reel ──────────►  [██████████░░░░░░]
 
     ▲ Bar hits 99%  → Line SNAPS! Bait lost. Fish escapes.
+    ▲ Bar hits 0%  → Fish escapes off hook, bait is kept.
     ▲ Bar stays under control + fish still on → CATCH!
 ```
 
@@ -135,7 +136,7 @@ Take your fish back to the shop and sell them for coins. Each fish species has a
 Fish difficulty is determined by `Player_Fishing_Force` — a lower value means the fish is **harder** to catch (the reel bar is more sensitive and the fight is more punishing).
 
 
-Predatory fish (Pike, Trout, Blue Marlin) can **only** be caught with a Spinner lure. All others use Cheese or Worm on a Floater.
+Predatory fish (Pike, Trout, Blue Marlin) can **only** be caught with a Spinner lure. All others Worm on a Floater.
 
 Each fish also has a `maxStrongSwimValue` that controls how many strong swims it makes before it can be caught, adding another layer of per-species behavior.
 
